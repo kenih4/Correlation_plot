@@ -1,6 +1,6 @@
 QT       += core gui
 
-greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
+greaterThan(QT_MAJOR_VERSION, 4): QT += widgets printsupport
 
 CONFIG += c++11
 
@@ -20,13 +20,15 @@ SOURCES += \
     cppmine.cpp \
     main.cpp \
     mainwindow.cpp \
-    mine.c
+    mine.c \
+    qcustomplot.cpp
 
 HEADERS += \
     corr_data.h \
     cppmine.h \
     mainwindow.h \
-    mine.h
+    mine.h \
+    qcustomplot.h
 
 FORMS += \
     mainwindow.ui

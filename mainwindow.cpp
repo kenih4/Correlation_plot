@@ -12,6 +12,12 @@ MainWindow::MainWindow(QWidget *parent)
     {
         exit(1);
     }
+    ui->widget_1->addGraph();
+    ui->widget_1->graph(0)->setPen(QPen(Qt::red));
+    ui->widget_1->graph(0)->setLineStyle(QCPGraph::lsNone);
+    ui->widget_1->graph(0)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle, Qt::red, Qt::white, 5));
+
+
 }
 
 MainWindow::~MainWindow()
@@ -25,7 +31,6 @@ void MainWindow::on_pushButton_clicked()
    corrdata = new Corr_data(50);
    corrdata->add_signal("xfel_mon_bpm_xsbt_3_x/position");
    corrdata->add_signal("xfel_mon_bpm_xsbt_5_x/position");
-   corrdata->add_signal("test");
    corrdata->add_signal("xfel_mon_csr_bc2_adc/voltage");
    corrdata->add_signal("xfel_mon_csr_bc3_adc/voltage");
 
@@ -49,6 +54,13 @@ void MainWindow::on_pushButton_clicked()
              corrdata->sig_name(j)<<"  "<<
              corrdata->mic(j)<<endl;
    }
+   QVector<double> x(corrdata->data_size()),y(corrdata->data_size());
+   for(int i=0;i<corrdata->data_size();i++){
+       x[i] = corrdata->value(corrdata->sig_name(1),i);
+       y[i] = corrdata->value(corrdata->sig_name(0),i);
+   }
+   ui->widget_1->graph(0)->setData(x,y);
+   ui->widget_1->replot();
 
    delete corrdata;
 }
