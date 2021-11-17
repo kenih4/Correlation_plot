@@ -46,6 +46,9 @@ public:
     int64_t sr_tag(int n){return data[n].sr_tag;};
     void calc_mic();
     double mic(int n){return sig[n].coefficient;};
+    double get_max(int n);
+    double get_min(int n);
+
 private:
     int size;
     vector <Signal_param> sig;

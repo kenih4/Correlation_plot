@@ -170,3 +170,21 @@ void Corr_data::calc_mic()
         delete [] y;
     }
 }
+
+double Corr_data::get_max(int n)
+{
+    double ret = data[0].value[sig[n].name];
+    for(int i=1;i<size;i++){
+        if(ret<data[i].value[sig[n].name])ret = data[i].value[sig[n].name];
+    }
+    return ret;
+}
+
+double Corr_data::get_min(int n)
+{
+    double ret = data[0].value[sig[n].name];
+    for(int i=1;i<size;i++){
+        if(ret>data[i].value[sig[n].name])ret = data[i].value[sig[n].name];
+    }
+    return ret;
+}

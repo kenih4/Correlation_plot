@@ -60,6 +60,8 @@ void MainWindow::on_pushButton_clicked()
        y[i] = corrdata->value(corrdata->sig_name(0),i);
    }
    ui->widget_1->graph(0)->setData(x,y);
+   ui->widget_1->yAxis->setRange(corrdata->get_min(0)*0.95,corrdata->get_max(0)*1.05);
+   ui->widget_1->xAxis->setRange(corrdata->get_min(1)*0.95,corrdata->get_max(1)*1.05);
    ui->widget_1->replot();
 
    delete corrdata;
