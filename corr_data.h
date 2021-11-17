@@ -7,6 +7,9 @@
 #include <boost/format.hpp>
 #include <map>
 #include "db_common.h"
+#include <cstdlib>
+#include <cmath>
+#include "cppmine.h"
 
 using namespace std;
 
@@ -41,6 +44,8 @@ public:
     string endtime(int n){return data[n].end_time;};
     int64_t sacla_tag(int n){return data[n].sacla_tag;};
     int64_t sr_tag(int n){return data[n].sr_tag;};
+    void calc_mic();
+    double mic(int n){return sig[n].coefficient;};
 private:
     int size;
     vector <Signal_param> sig;

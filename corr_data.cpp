@@ -148,3 +148,25 @@ void Corr_data::db_get_sync_data()
     db_release_signal_list_all(&siglist);
 
 }
+
+void Corr_data::calc_mic()
+{
+    MINE *mine;
+    double *x,*y;
+    int n;
+    for(int i=0;i<(int)sig.size();i++){
+        mine = new MINE(0.6, 15, EST_MIC_APPROX);
+        n = size;
+        x = new double [n];
+        y = new double [n];
+        for(int j=0;j<n;j++){
+            x[j] = data[j].value[sig[0].name];
+            y[j] = data[j].value[sig[i].name];
+        }
+        mine->compute_score(x,y,n);
+        sig[i].coefficient = mine->mic();
+        delete mine;
+        delete [] x;
+        delete [] y;
+    }
+}

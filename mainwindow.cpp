@@ -22,7 +22,7 @@ MainWindow::~MainWindow()
 
 void MainWindow::on_pushButton_clicked()
 {
-   corrdata = new Corr_data(10);
+   corrdata = new Corr_data(50);
    corrdata->add_signal("xfel_mon_bpm_xsbt_3_x/position");
    corrdata->add_signal("xfel_mon_bpm_xsbt_5_x/position");
    corrdata->add_signal("test");
@@ -43,5 +43,12 @@ void MainWindow::on_pushButton_clicked()
        }
 
    }
+   corrdata->calc_mic();
+   for(int j=0;j<corrdata->sig_size();j++){
+       cerr<<" "<<j<<"  "<<
+             corrdata->sig_name(j)<<"  "<<
+             corrdata->mic(j)<<endl;
+   }
+
    delete corrdata;
 }
