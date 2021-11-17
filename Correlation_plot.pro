@@ -17,12 +17,16 @@ DEFINES += QT_DEPRECATED_WARNINGS
 
 SOURCES += \
     corr_data.cpp \
+    cppmine.cpp \
     main.cpp \
-    mainwindow.cpp
+    mainwindow.cpp \
+    mine.c
 
 HEADERS += \
     corr_data.h \
-    mainwindow.h
+    cppmine.h \
+    mainwindow.h \
+    mine.h
 
 FORMS += \
     mainwindow.ui
