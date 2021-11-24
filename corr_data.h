@@ -24,7 +24,6 @@ typedef struct{
 typedef struct{
     string name;
     double coefficient;
-    int priority;
 }Signal_param;
 
 class Corr_data
@@ -34,7 +33,7 @@ public:
     ~Corr_data();
     void get_tag(string endtime);
     void get_tag(string begtime,string endtime);
-    void add_signal(string signal){sig.push_back({signal,0,0});};
+    void add_signal(string signal){sig.push_back({signal,0});};
     void db_get_sync_data();
     int data_size(){return size;};
     int sig_size(){return sig.size();};
@@ -48,6 +47,9 @@ public:
     double mic(int n){return sig[n].coefficient;};
     double get_max(int n);
     double get_min(int n);
+    double get_max(int n,double ratio);
+    double get_min(int n,double ratio);
+    int get_ranking(int ranking);
 
 private:
     int size;

@@ -2,7 +2,7 @@
 
 Corr_data::Corr_data(int data_num)
 {
-    sig.push_back({"sr_safety_topup_intlk_beam/efficiency",0,0});
+    sig.push_back({"sr_safety_topup_intlk_beam/efficiency",0});
     size = data_num;
     data.resize(size);
 }
@@ -186,5 +186,53 @@ double Corr_data::get_min(int n)
     for(int i=1;i<size;i++){
         if(ret>data[i].value[sig[n].name])ret = data[i].value[sig[n].name];
     }
+    return ret;
+}
+
+double Corr_data::get_max(int n,double ratio)
+{
+    double max = data[0].value[sig[n].name];
+    double min = data[0].value[sig[n].name];
+    double ret;
+    for(int i=1;i<size;i++){
+        if(max<data[i].value[sig[n].name])max = data[i].value[sig[n].name];
+        if(min>data[i].value[sig[n].name])min = data[i].value[sig[n].name];
+    }
+    ret = max + (max - min) * ratio;
+    return ret;
+}
+
+double Corr_data::get_min(int n,double ratio)
+{
+    double max = data[0].value[sig[n].name];
+    double min = data[0].value[sig[n].name];
+    double ret;
+    for(int i=1;i<size;i++){
+        if(max<data[i].value[sig[n].name])max = data[i].value[sig[n].name];
+        if(min>data[i].value[sig[n].name])min = data[i].value[sig[n].name];
+    }
+    ret = min - (max - min) * ratio;
+    return ret;
+}
+
+int Corr_data::get_ranking(int ranking)
+{
+    int ret = 0;
+    vector<int> rank;
+    rank.resize((int)sig.size());
+
+    for(int i=0;i<(int)sig.size();i++){
+        rank[i] = 0;
+        for(int j=0;j<(int)sig.size();j++){
+            if(i!=j && sig[i].coefficient<sig[j].coefficient){
+                rank[i]++;
+            }
+        }
+    }
+    for(int i=0;i<(int)sig.size();i++){
+        //cerr<<"i="<<i<<" coeff = "<<sig[i].coefficient<<" rank = "<<rank[i]<<endl;
+        if(rank[i] == ranking)ret = i;
+    }
+
     return ret;
 }
