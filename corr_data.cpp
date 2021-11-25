@@ -2,7 +2,7 @@
 
 Corr_data::Corr_data(int data_num)
 {
-    sig.push_back({"sr_safety_topup_intlk_beam/efficiency",0});
+    //sig.push_back({"sr_safety_topup_intlk_beam/efficiency",0});
     size = data_num;
     data.resize(size);
 }
