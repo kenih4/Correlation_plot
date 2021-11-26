@@ -39,6 +39,7 @@ void MainWindow::on_pushButton_clicked()
 {
     ui->dateTimeEdit->setDateTime(QDateTime::currentDateTime());
     ui->dateTimeEdit->setDisplayFormat(tr("yyyy/MM/dd HH:mm:ss"));
+
     corrdata = new Corr_data(60);
     //    corrdata->add_signal("sr_safety_topup_intlk_beam/efficiency");
     //    corrdata->add_signal("xfel_mon_blm_xsbt/min_voltage");
