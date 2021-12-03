@@ -12,6 +12,9 @@ MainWindow::MainWindow(QWidget *parent)
     {
         //        exit(1);
     }
+    ui->dateTimeEdit->setDateTime(QDateTime::currentDateTime());
+    ui->dateTimeEdit->setDisplayFormat(tr("yyyy/MM/dd HH:mm:ss"));
+
     ui->widget_1->addGraph();
     ui->widget_1->graph(0)->setPen(QPen(Qt::red));
     ui->widget_1->graph(0)->setLineStyle(QCPGraph::lsNone);
@@ -37,10 +40,7 @@ MainWindow::~MainWindow()
 
 void MainWindow::on_pushButton_clicked()
 {
-    ui->dateTimeEdit->setDateTime(QDateTime::currentDateTime());
-    ui->dateTimeEdit->setDisplayFormat(tr("yyyy/MM/dd HH:mm:ss"));
-
-    corrdata = new Corr_data(60);
+    corrdata = new Corr_data(ui->spinBox->value());
     //    corrdata->add_signal("sr_safety_topup_intlk_beam/efficiency");
     //    corrdata->add_signal("xfel_mon_blm_xsbt/min_voltage");
     //    corrdata->add_signal("xfel_mon_bpm_xsbt_1_x/position");
@@ -195,4 +195,10 @@ void MainWindow::on_listWidget_doubleClicked(const QModelIndex &index)
     {
         ui->listWidget->insertItem(0,currentItem);
     }
+}
+
+void MainWindow::on_pushButton_2_clicked()
+{
+    ui->dateTimeEdit->setDateTime(QDateTime::currentDateTime());
+    ui->dateTimeEdit->setDisplayFormat(tr("yyyy/MM/dd HH:mm:ss"));
 }

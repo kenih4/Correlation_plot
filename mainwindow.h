@@ -23,6 +23,8 @@ private slots:
     void on_pushButton_delete_clicked();
     void on_listWidget_doubleClicked(const QModelIndex &index);
 
+    void on_pushButton_2_clicked();
+
 private:
     Ui::MainWindow *ui;
     Corr_data *corrdata;
