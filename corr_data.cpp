@@ -6,6 +6,7 @@ Corr_data::Corr_data(int data_num)
     size = data_num;
     data.resize(size);
 }
+
 Corr_data::~Corr_data(){
 
 }

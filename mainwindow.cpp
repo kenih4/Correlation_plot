@@ -30,6 +30,12 @@ MainWindow::MainWindow(QWidget *parent)
     ui->widget_3->graph(0)->setLineStyle(QCPGraph::lsNone);
     ui->widget_3->graph(0)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle, Qt::red, Qt::white, 3));
     create_tree();
+
+    timer = new QTimer(this);
+    timer->setInterval(60000);
+    connect(timer, SIGNAL(timeout()), this, SLOT(update_data()));
+    timer->start();
+
 }
 
 MainWindow::~MainWindow()
@@ -144,6 +150,8 @@ void MainWindow::on_treeWidget_itemDoubleClicked(QTreeWidgetItem *item, int colu
 {
     cerr<<column<<item->text(column).toStdString()<<endl;
     cerr<<ui->listWidget->count()<<endl;
+    cerr<<item->childCount()<<endl;
+    if(item->childCount()!=0)return;
     for(int i= 0;i<ui->listWidget->count();++i){
         cerr<<ui->listWidget->item(i)->text().toStdString()<<endl;
         if(ui->listWidget->item(i)->text().toStdString().compare(item->text(column).toStdString())==0)return;
@@ -201,4 +209,12 @@ void MainWindow::on_pushButton_2_clicked()
 {
     ui->dateTimeEdit->setDateTime(QDateTime::currentDateTime());
     ui->dateTimeEdit->setDisplayFormat(tr("yyyy/MM/dd HH:mm:ss"));
+}
+
+void MainWindow::update_data()
+{
+    cerr<<"CHECK BOX = "<<ui->checkBox->checkState()<<endl;
+    if(ui->checkBox->checkState()==0)return;
+    ui->dateTimeEdit->setDateTime(QDateTime::currentDateTime());
+    on_pushButton_clicked();
 }
