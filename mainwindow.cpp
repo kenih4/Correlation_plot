@@ -10,7 +10,7 @@ MainWindow::MainWindow(QWidget *parent)
     cerr << "#### DB Init : " << status << endl;
     if(DB_OK != status)
     {
-        //        exit(1);
+             exit(1);
     }
     ui->dateTimeEdit->setDateTime(QDateTime::currentDateTime());
     ui->dateTimeEdit->setDisplayFormat(tr("yyyy/MM/dd HH:mm:ss"));
@@ -29,6 +29,24 @@ MainWindow::MainWindow(QWidget *parent)
     ui->widget_3->graph(0)->setPen(QPen(Qt::red));
     ui->widget_3->graph(0)->setLineStyle(QCPGraph::lsNone);
     ui->widget_3->graph(0)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle, Qt::red, Qt::white, 5));
+
+    ui->listWidget->addItem("sr_safety_topup_intlk_beam/efficiency");
+    ui->listWidget->addItem("xfel_mon_bpm_xsbt_3_x/position");
+    ui->listWidget->addItem("xfel_mon_bpm_xsbt_3_y/position");
+    ui->listWidget->addItem("xfel_mon_bpm_xsbt_5_x/position");
+    ui->listWidget->addItem("xfel_mon_bpm_xsbt_5_y/position");
+    ui->listWidget->addItem("xfel_mon_bpm_xsbt_7_x/position");
+    ui->listWidget->addItem("xfel_mon_bpm_xsbt_7_y/position");
+    ui->listWidget->addItem("sr_mon_bpm_xsbt_15_x/position");
+    ui->listWidget->addItem("sr_mon_bpm_xsbt_15_y/position");
+    ui->listWidget->addItem("sr_mon_bpm_xsbt_16_x/position");
+    ui->listWidget->addItem("sr_mon_bpm_xsbt_16_y/position");
+    ui->listWidget->addItem("sr_mon_bpm_xsbt_25_x/position");
+    ui->listWidget->addItem("sr_mon_bpm_xsbt_25_y/position");
+    ui->listWidget->addItem("xfel_mon_msbpm_bc3_x/position");
+
+
+
     create_tree();
     ui->V_threshold->setText(QString::number(0));
     timer = new QTimer(this);
