@@ -18,24 +18,24 @@ MainWindow::MainWindow(QWidget *parent)
     ui->widget_1->addGraph();
     ui->widget_1->graph(0)->setPen(QPen(Qt::red));
     ui->widget_1->graph(0)->setLineStyle(QCPGraph::lsNone);
-    ui->widget_1->graph(0)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle, Qt::red, Qt::white, 3));
+    ui->widget_1->graph(0)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle, Qt::red, Qt::white, 5));
 
     ui->widget_2->addGraph();
     ui->widget_2->graph(0)->setPen(QPen(Qt::red));
     ui->widget_2->graph(0)->setLineStyle(QCPGraph::lsNone);
-    ui->widget_2->graph(0)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle, Qt::red, Qt::white, 3));
+    ui->widget_2->graph(0)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle, Qt::red, Qt::white, 5));
 
     ui->widget_3->addGraph();
     ui->widget_3->graph(0)->setPen(QPen(Qt::red));
     ui->widget_3->graph(0)->setLineStyle(QCPGraph::lsNone);
-    ui->widget_3->graph(0)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle, Qt::red, Qt::white, 3));
+    ui->widget_3->graph(0)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle, Qt::red, Qt::white, 5));
     create_tree();
-
+    ui->V_threshold->setText(QString::number(0));
     timer = new QTimer(this);
     timer->setInterval(60000);
     connect(timer, SIGNAL(timeout()), this, SLOT(update_data()));
     timer->start();
-
+    corrdata = new Corr_data(ui->spinBox->value());
 }
 
 MainWindow::~MainWindow()
@@ -46,20 +46,8 @@ MainWindow::~MainWindow()
 
 void MainWindow::on_pushButton_clicked()
 {
+    delete corrdata;
     corrdata = new Corr_data(ui->spinBox->value());
-    //    corrdata->add_signal("sr_safety_topup_intlk_beam/efficiency");
-    //    corrdata->add_signal("xfel_mon_blm_xsbt/min_voltage");
-    //    corrdata->add_signal("xfel_mon_bpm_xsbt_1_x/position");
-    //    corrdata->add_signal("xfel_mon_bpm_xsbt_3_x/position");
-    //    corrdata->add_signal("xfel_mon_bpm_xsbt_5_x/position");
-    //    corrdata->add_signal("sr_mon_bpm_xsbt_25_x/position");
-    //    corrdata->add_signal("sr_mon_bpm_xsbt_25_y/position");
-    //    corrdata->add_signal("xfel_mon_csr_bc1_adc/voltage");
-    //    corrdata->add_signal("xfel_mon_csr_bc2_adc/voltage");
-    //    corrdata->add_signal("xfel_mon_csr_bc3_adc/voltage");
-    //    corrdata->add_signal("xfel_mon_msbpm_bc1_x/position");
-    //    corrdata->add_signal("xfel_mon_msbpm_bc2_x/position");
-    //    corrdata->add_signal("xfel_mon_msbpm_bc3_x/position");
 
     for(int i= 0;i<ui->listWidget->count();++i){
         corrdata->add_signal(ui->listWidget->item(i)->text().toStdString().c_str());
@@ -79,7 +67,11 @@ void MainWindow::on_pushButton_clicked()
         }
 
     }
-    corrdata->calc_mic();
+    if(ui->checkBox_th->checkState()==Qt::Checked){
+        corrdata->calc_mic(ui->V_threshold->text().toDouble());
+    }else{
+        corrdata->calc_mic();
+    }
     for(int j=0;j<corrdata->sig_size();j++){
         cerr<<" "<<j<<"  "<<
               corrdata->sig_name(j)<<"  "<<
@@ -96,8 +88,13 @@ void MainWindow::on_pushButton_clicked()
     }
 
     ui->widget_1->graph(0)->setData(x,y);
-    ui->widget_1->xAxis->setRange(corrdata->get_min(n,0.5),corrdata->get_max(n,0.5));
-    ui->widget_1->yAxis->setRange(corrdata->get_min(0,0.5),corrdata->get_max(0,0.5));
+    if(ui->checkBox_th->checkState()==Qt::Checked){
+        ui->widget_1->xAxis->setRange(corrdata->get_min(n,0.5,0,ui->V_threshold->text().toDouble()),corrdata->get_max(n,0.5,0,ui->V_threshold->text().toDouble()));
+        ui->widget_1->yAxis->setRange(corrdata->get_min(0,0.5,0,ui->V_threshold->text().toDouble()),corrdata->get_max(0,0.5,0,ui->V_threshold->text().toDouble()));
+    }else{
+        ui->widget_1->xAxis->setRange(corrdata->get_min(n,0.5),corrdata->get_max(n,0.5));
+        ui->widget_1->yAxis->setRange(corrdata->get_min(0,0.5),corrdata->get_max(0,0.5));
+    }
     ui->widget_1->xAxis->setLabel(tr(corrdata->sig_name(n).c_str()));
     ui->widget_1->yAxis->setLabel(tr(corrdata->sig_name(0).c_str()));
     ui->widget_1->graph(0)->setName(QString("mic : %1").arg(corrdata->mic(n)));
@@ -114,8 +111,14 @@ void MainWindow::on_pushButton_clicked()
     }
 
     ui->widget_2->graph(0)->setData(x,y);
-    ui->widget_2->xAxis->setRange(corrdata->get_min(n,0.5),corrdata->get_max(n,0.5));
-    ui->widget_2->yAxis->setRange(corrdata->get_min(0,0.5),corrdata->get_max(0,0.5));
+    if(ui->checkBox_th->checkState()==Qt::Checked){
+        ui->widget_2->xAxis->setRange(corrdata->get_min(n,0.5,0,ui->V_threshold->text().toDouble()),corrdata->get_max(n,0.5,0,ui->V_threshold->text().toDouble()));
+        ui->widget_2->yAxis->setRange(corrdata->get_min(0,0.5,0,ui->V_threshold->text().toDouble()),corrdata->get_max(0,0.5,0,ui->V_threshold->text().toDouble()));
+    }else{
+        ui->widget_2->xAxis->setRange(corrdata->get_min(n,0.5),corrdata->get_max(n,0.5));
+        ui->widget_2->yAxis->setRange(corrdata->get_min(0,0.5),corrdata->get_max(0,0.5));
+
+    }
     ui->widget_2->xAxis->setLabel(tr(corrdata->sig_name(n).c_str()));
     ui->widget_2->yAxis->setLabel(tr(corrdata->sig_name(0).c_str()));
     ui->widget_2->graph(0)->setName(QString("mic : %1").arg(corrdata->mic(n)));
@@ -132,8 +135,14 @@ void MainWindow::on_pushButton_clicked()
     }
 
     ui->widget_3->graph(0)->setData(x,y);
-    ui->widget_3->xAxis->setRange(corrdata->get_min(n,0.5),corrdata->get_max(n,0.5));
-    ui->widget_3->yAxis->setRange(corrdata->get_min(0,0.5),corrdata->get_max(0,0.5));
+    if(ui->checkBox_th->checkState()==Qt::Checked){
+        ui->widget_3->xAxis->setRange(corrdata->get_min(n,0.5,0,ui->V_threshold->text().toDouble()),corrdata->get_max(n,0.5,0,ui->V_threshold->text().toDouble()));
+        ui->widget_3->yAxis->setRange(corrdata->get_min(0,0.5,0,ui->V_threshold->text().toDouble()),corrdata->get_max(0,0.5,0,ui->V_threshold->text().toDouble()));
+    }else{
+        ui->widget_3->xAxis->setRange(corrdata->get_min(n,0.5),corrdata->get_max(n,0.5));
+        ui->widget_3->yAxis->setRange(corrdata->get_min(0,0.5),corrdata->get_max(0,0.5));
+
+    }
     ui->widget_3->xAxis->setLabel(tr(corrdata->sig_name(n).c_str()));
     ui->widget_3->yAxis->setLabel(tr(corrdata->sig_name(0).c_str()));
     ui->widget_3->graph(0)->setName(QString("mic : %1").arg(corrdata->mic(n)));
@@ -143,7 +152,6 @@ void MainWindow::on_pushButton_clicked()
     ui->widget_3->axisRect()->insetLayout()->setInsetAlignment(0,Qt::AlignTop|Qt::AlignRight);
     ui->widget_3->replot();
 
-    delete corrdata;
 }
 
 void MainWindow::on_treeWidget_itemDoubleClicked(QTreeWidgetItem *item, int column)

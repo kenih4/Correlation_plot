@@ -21,9 +21,12 @@ typedef struct{
     map <string,double>value;
 }Data;
 
-typedef struct{
+typedef struct Signal_param{
     string name;
     double coefficient;
+    bool operator==(const Signal_param &other) const {
+        return name == other.name;
+    }
 }Signal_param;
 
 class Corr_data
@@ -33,7 +36,12 @@ public:
     ~Corr_data();
     void get_tag(string endtime);
     void get_tag(string begtime,string endtime);
-    void add_signal(string signal){sig.push_back({signal,0});};
+    void add_signal(string signal){
+        Signal_param s = {signal,0};
+        if(find(sig.begin(),sig.end(),s)==sig.end()){
+        sig.push_back(s);
+        }
+    };
     void db_get_sync_data();
     int data_size(){return size;};
     int sig_size(){return sig.size();};
@@ -44,12 +52,18 @@ public:
     int64_t sacla_tag(int n){return data[n].sacla_tag;};
     int64_t sr_tag(int n){return data[n].sr_tag;};
     void calc_mic();
+    void calc_mic(double th);
     double mic(int n){return sig[n].coefficient;};
     double get_max(int n);
     double get_min(int n);
     double get_max(int n,double ratio);
     double get_min(int n,double ratio);
+    double get_max(int n,double ratio,int a,double th);
+    double get_min(int n,double ratio,int a,double th);
     int get_ranking(int ranking);
+    void append();
+    void add_tag(string strtime);
+    void add_db_get_sync_data();
 
 private:
     int size;

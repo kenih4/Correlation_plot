@@ -10,7 +10,6 @@ Corr_data::Corr_data(int data_num)
 Corr_data::~Corr_data(){
 
 }
-
 void Corr_data::get_tag(string endtime)
 {
     string sep5u = "sr_mon_screen_sep5u_otr/intensity";
@@ -126,23 +125,23 @@ void Corr_data::db_get_sync_data()
             }
         }
     }
-
+    cerr<<"num_siglist  =  "<<siglist.num_signal<<endl;
     for(int n=0;n<size;n++){
         status = db_get_data_multi(&siglist,data[n].beg_time.c_str(),data[n].end_time.c_str(),1,0);
         if(status == 0){
             for(int i=0;i<(int)sig.size();i++){
                 for(int j=0;j<siglist.num_signal;j++){
                     if(sig[i].name.compare(siglist.signal_list[j].sig_name)==0){
-	                    tData = &siglist.signal_list[j];
-	                    fdata = (Db_f_data*)tData->data;
-	                    for(int m=0;m<tData->num_data;m++){
+                        tData = &siglist.signal_list[j];
+                        fdata = (Db_f_data*)tData->data;
+                        for(int m=0;m<tData->num_data;m++){
                             if(fdata[m].evno == data[n].sacla_tag||
-                            fdata[m].evno == data[n].sr_tag){
+                                    fdata[m].evno == data[n].sr_tag){
                                 data[n].value[sig[i].name] = fdata[m].fdata;
                             }
                         }
-	                }	  
-	            }
+                    }
+                }
             }
         }
     }
@@ -163,6 +162,35 @@ void Corr_data::calc_mic()
         for(int j=0;j<n;j++){
             x[j] = data[j].value[sig[0].name];
             y[j] = data[j].value[sig[i].name];
+        }
+        mine->compute_score(x,y,n);
+        sig[i].coefficient = mine->mic();
+        delete mine;
+        delete [] x;
+        delete [] y;
+    }
+}
+void Corr_data::calc_mic(double th)
+{
+    MINE *mine;
+    double *x,*y;
+    int n = 0,m = 0;
+    for(int i=0;i<(int)size;i++){
+        if(data[i].value[sig[0].name]>th){
+            n++;
+        }
+    }
+    for(int i=0;i<(int)sig.size();i++){
+        mine = new MINE(0.6, 15, EST_MIC_APPROX);
+        x = new double [n];
+        y = new double [n];
+        m = 0;
+        for(int j=0;j<(int)size;j++){
+            if(data[j].value[sig[0].name]>th){
+                x[m] = data[j].value[sig[0].name];
+                y[m] = data[j].value[sig[i].name];
+                m++;
+            }
         }
         mine->compute_score(x,y,n);
         sig[i].coefficient = mine->mic();
@@ -216,6 +244,36 @@ double Corr_data::get_min(int n,double ratio)
     return ret;
 }
 
+double Corr_data::get_max(int n,double ratio,int a,double th)
+{
+    double max = data[0].value[sig[n].name];
+    double min = data[0].value[sig[n].name];
+    double ret;
+    for(int i=1;i<size;i++){
+        if(data[i].value[sig[a].name]>th){
+            if(max<data[i].value[sig[n].name])max = data[i].value[sig[n].name];
+            if(min>data[i].value[sig[n].name])min = data[i].value[sig[n].name];
+        }
+    }
+    ret = max + (max - min) * ratio;
+    return ret;
+}
+
+double Corr_data::get_min(int n,double ratio,int a,double th)
+{
+    double max = data[0].value[sig[n].name];
+    double min = data[0].value[sig[n].name];
+    double ret;
+    for(int i=1;i<size;i++){
+        if(data[i].value[sig[a].name]>th){
+            if(max<data[i].value[sig[n].name])max = data[i].value[sig[n].name];
+            if(min>data[i].value[sig[n].name])min = data[i].value[sig[n].name];
+        }
+    }
+    ret = min - (max - min) * ratio;
+    return ret;
+}
+
 int Corr_data::get_ranking(int ranking)
 {
     int ret = 0;
@@ -236,4 +294,118 @@ int Corr_data::get_ranking(int ranking)
     }
 
     return ret;
+}
+
+void Corr_data::append()
+{
+    ++size;
+    data.resize(size);
+}
+
+void Corr_data::add_tag(string strtime)
+{
+    string endtime,begtime;
+    string sep5u = "sr_mon_screen_sep5u_otr/intensity";
+    string route = "xfel_tmg_sw_master_ema_route_inf_shm/current";
+    string ssbt = "sr_safety_topup_intlk_beam_ssbt1/charge";
+    Db_f_data *get_inf_sep5u;
+    Db_i_data *get_inf_route;
+    Db_f_data *get_inf_ssbt;
+    int get_inf_cnt_sep5u = 0,get_inf_cnt_route = 0,get_inf_cnt_ssbt = 0;
+    int status;
+    char out[256];
+    uint64_t btime;
+    int org_size;
+
+    org_size = size;
+    if(strtime<data.begin()->end_time){
+        endtime = data.begin()->end_time;
+        begtime = strtime;
+    }else if(strtime>data.end()->beg_time){
+        endtime = strtime;
+        begtime = data.end()->beg_time;
+    }else{
+        return;
+    }
+
+
+    status = db_get_data_f(sep5u.c_str(),begtime.c_str(),endtime.c_str(),&get_inf_sep5u,&get_inf_cnt_sep5u);
+    if(status==0 && get_inf_cnt_sep5u>0){
+        for(int i=0;i<get_inf_cnt_sep5u;i++){
+            cerr<<(get_inf_sep5u+i)->evno << "  " << (get_inf_sep5u+i)->tdata<<endl;
+            db_unixtime_us_to_date((get_inf_sep5u+i)->unixtime_us,out);
+            status = db_get_data_num_i(route.c_str(),out,60,&get_inf_route,&get_inf_cnt_route);
+            if(status==0 && get_inf_cnt_route>0){
+                append();
+                for(int j=0;j<get_inf_cnt_route;j++){
+                    if((get_inf_route+j)->idata==769){
+                        data[i+org_size].sacla_tag=(get_inf_route+j)->evno;
+                        db_unixtime_us_to_date((get_inf_route+get_inf_cnt_route-1)->unixtime_us,out);
+                        data[i+org_size].beg_time = out;
+                        db_unixtime_us_add_sec(get_inf_route->unixtime_us,2.0,&btime);
+                        db_unixtime_us_to_date(btime,out);
+                        data[i+org_size].end_time = out;
+                        status = db_get_data_f(ssbt.c_str(),data[i+org_size].beg_time.c_str(),data[i+org_size].end_time.c_str(),&get_inf_ssbt,&get_inf_cnt_ssbt);
+                        if(status == 0 && get_inf_cnt_ssbt>0){
+                            for(int n=0;n<get_inf_cnt_ssbt;n++){
+                                if((get_inf_ssbt+n)->fdata > 0.0){
+                                    data[i+org_size].sr_tag = (get_inf_ssbt+n)->evno;
+                                    break;
+                                }
+                            }
+                            free(get_inf_ssbt);
+                        }
+                        break;
+                    }
+                }
+                free(get_inf_route);
+            }
+        }
+        free(get_inf_sep5u);
+    }
+}
+
+void Corr_data::add_db_get_sync_data()
+{
+    int status;
+    DB_SIGNAL_STRUCT siglist;
+    DB_SIGNAL_DATA* tData;
+    Db_f_data *fdata;
+
+    for(int n=0;n<size;n++){
+        status = db_init_signal_list(&siglist);
+        if(status == 0){
+            for(auto itr = sig.begin();itr != sig.end(); ++itr){
+                if(data[n].value.count(itr->name)==0){
+                    status = db_add_signal_list(&siglist,itr->name.c_str());
+                    if(status != 0){
+                        printf("err db_add_signal_list :: %s\n",itr->name.c_str());
+                        sig.erase(itr);
+                        itr--;
+                    }
+                }
+            }
+        }
+        if(siglist.num_signal>0){
+            status = db_get_data_multi(&siglist,data[n].beg_time.c_str(),data[n].end_time.c_str(),1,0);
+            if(status == 0){
+                for(int i=0;i<(int)sig.size();i++){
+                    for(int j=0;j<siglist.num_signal;j++){
+                        if(sig[i].name.compare(siglist.signal_list[j].sig_name)==0){
+                            tData = &siglist.signal_list[j];
+                            fdata = (Db_f_data*)tData->data;
+                            for(int m=0;m<tData->num_data;m++){
+                                if(fdata[m].evno == data[n].sacla_tag||
+                                        fdata[m].evno == data[n].sr_tag){
+                                    data[n].value[sig[i].name] = fdata[m].fdata;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            db_release_signal_list_all(&siglist);
+        }
+    }
 }
