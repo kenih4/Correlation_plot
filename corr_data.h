@@ -13,12 +13,15 @@
 
 using namespace std;
 
-typedef struct{
+typedef struct Data{
     int64_t sacla_tag;
     int64_t sr_tag;
     string beg_time;
     string end_time;
     map <string,double>value;
+    bool operator<(const Data &right)const {
+        return sacla_tag == right.sacla_tag ? sr_tag < right.sr_tag : sacla_tag < right.sacla_tag;
+    }
 }Data;
 
 typedef struct Signal_param{
@@ -62,6 +65,8 @@ public:
     double get_min(int n,double ratio,int a,double th);
     int get_ranking(int ranking);
     void append();
+    void erase();
+    void erase(int n);
     void add_tag(string strtime);
     void add_db_get_sync_data();
 

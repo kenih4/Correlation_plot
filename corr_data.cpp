@@ -105,6 +105,7 @@ void Corr_data::get_tag(string begtime,string endtime)
         }
         free(get_inf_sep5u);
     }
+    sort(data.begin(),data.end());
 }
 
 void Corr_data::db_get_sync_data()
@@ -298,10 +299,23 @@ int Corr_data::get_ranking(int ranking)
 
 void Corr_data::append()
 {
-    ++size;
+    size+=1;
     data.resize(size);
 }
 
+void Corr_data::erase()
+{
+    data.erase(data.begin());
+    size-=1;
+}
+
+void Corr_data::erase(int n)
+{
+    for(int i=0;i<n;i++){
+        data.erase(data.begin());
+        size-=1;
+    }
+}
 void Corr_data::add_tag(string strtime)
 {
     string endtime,begtime;
@@ -317,13 +331,15 @@ void Corr_data::add_tag(string strtime)
     uint64_t btime;
     int org_size;
 
+    sort(data.begin(),data.end());
+
     org_size = size;
-    if(strtime<data.begin()->end_time){
-        endtime = data.begin()->end_time;
+    if(strtime<data.front().beg_time){
+        endtime = data.front().beg_time;
         begtime = strtime;
-    }else if(strtime>data.end()->beg_time){
+    }else if(strtime>data.back().end_time){
         endtime = strtime;
-        begtime = data.end()->beg_time;
+        begtime = data.back().end_time;
     }else{
         return;
     }
@@ -363,6 +379,8 @@ void Corr_data::add_tag(string strtime)
         }
         free(get_inf_sep5u);
     }
+    sort(data.begin(),data.end());
+
 }
 
 void Corr_data::add_db_get_sync_data()

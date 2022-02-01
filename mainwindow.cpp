@@ -50,7 +50,7 @@ MainWindow::MainWindow(QWidget *parent)
     create_tree();
     ui->V_threshold->setText(QString::number(0));
     timer = new QTimer(this);
-    timer->setInterval(60000);
+    timer->setInterval(6000);
     connect(timer, SIGNAL(timeout()), this, SLOT(update_data()));
     timer->start();
     corrdata = new Corr_data(ui->spinBox->value());
@@ -95,83 +95,42 @@ void MainWindow::on_pushButton_clicked()
               corrdata->sig_name(j)<<"  "<<
               corrdata->mic(j)<<endl;
     }
+
+    plot_data(ui->widget_1,corrdata->get_ranking(1));
+    plot_data(ui->widget_2,corrdata->get_ranking(2));
+    plot_data(ui->widget_3,corrdata->get_ranking(3));
+
+}
+void MainWindow::plot_data(QCustomPlot *plot,int n)
+{
     QVector<double> x(corrdata->data_size()),y(corrdata->data_size());
     QFont legendFont = font();
     legendFont.setPointSize(9);
-    int n;
-    n = corrdata->get_ranking(1);
+
     for(int i=0;i<corrdata->data_size();i++){
         x[i] = corrdata->value(corrdata->sig_name(n),i);
         y[i] = corrdata->value(corrdata->sig_name(0),i);
     }
 
-    ui->widget_1->graph(0)->setData(x,y);
+    plot->graph(0)->setData(x,y);
     if(ui->checkBox_th->checkState()==Qt::Checked){
-        ui->widget_1->xAxis->setRange(corrdata->get_min(n,0.5,0,ui->V_threshold->text().toDouble()),corrdata->get_max(n,0.5,0,ui->V_threshold->text().toDouble()));
-        ui->widget_1->yAxis->setRange(corrdata->get_min(0,0.5,0,ui->V_threshold->text().toDouble()),corrdata->get_max(0,0.5,0,ui->V_threshold->text().toDouble()));
+        plot->xAxis->setRange(corrdata->get_min(n,0.5,0,ui->V_threshold->text().toDouble()),corrdata->get_max(n,0.5,0,ui->V_threshold->text().toDouble()));
+        plot->yAxis->setRange(corrdata->get_min(0,0.5,0,ui->V_threshold->text().toDouble()),corrdata->get_max(0,0.5,0,ui->V_threshold->text().toDouble()));
     }else{
-        ui->widget_1->xAxis->setRange(corrdata->get_min(n,0.5),corrdata->get_max(n,0.5));
-        ui->widget_1->yAxis->setRange(corrdata->get_min(0,0.5),corrdata->get_max(0,0.5));
-    }
-    ui->widget_1->xAxis->setLabel(tr(corrdata->sig_name(n).c_str()));
-    ui->widget_1->yAxis->setLabel(tr(corrdata->sig_name(0).c_str()));
-    ui->widget_1->graph(0)->setName(QString("mic : %1").arg(corrdata->mic(n)));
-    ui->widget_1->legend->setVisible(true);
-    ui->widget_1->legend->setFont(legendFont);
-    ui->widget_1->legend->setBrush(QBrush(QColor(255,255,255,230)));
-    ui->widget_1->axisRect()->insetLayout()->setInsetAlignment(0,Qt::AlignTop|Qt::AlignRight);
-    ui->widget_1->replot();
-
-    n = corrdata->get_ranking(2);
-    for(int i=0;i<corrdata->data_size();i++){
-        x[i] = corrdata->value(corrdata->sig_name(n),i);
-        y[i] = corrdata->value(corrdata->sig_name(0),i);
-    }
-
-    ui->widget_2->graph(0)->setData(x,y);
-    if(ui->checkBox_th->checkState()==Qt::Checked){
-        ui->widget_2->xAxis->setRange(corrdata->get_min(n,0.5,0,ui->V_threshold->text().toDouble()),corrdata->get_max(n,0.5,0,ui->V_threshold->text().toDouble()));
-        ui->widget_2->yAxis->setRange(corrdata->get_min(0,0.5,0,ui->V_threshold->text().toDouble()),corrdata->get_max(0,0.5,0,ui->V_threshold->text().toDouble()));
-    }else{
-        ui->widget_2->xAxis->setRange(corrdata->get_min(n,0.5),corrdata->get_max(n,0.5));
-        ui->widget_2->yAxis->setRange(corrdata->get_min(0,0.5),corrdata->get_max(0,0.5));
+        plot->xAxis->setRange(corrdata->get_min(n,0.5),corrdata->get_max(n,0.5));
+        plot->yAxis->setRange(corrdata->get_min(0,0.5),corrdata->get_max(0,0.5));
 
     }
-    ui->widget_2->xAxis->setLabel(tr(corrdata->sig_name(n).c_str()));
-    ui->widget_2->yAxis->setLabel(tr(corrdata->sig_name(0).c_str()));
-    ui->widget_2->graph(0)->setName(QString("mic : %1").arg(corrdata->mic(n)));
-    ui->widget_2->legend->setVisible(true);
-    ui->widget_2->legend->setFont(legendFont);
-    ui->widget_2->legend->setBrush(QBrush(QColor(255,255,255,230)));
-    ui->widget_2->axisRect()->insetLayout()->setInsetAlignment(0,Qt::AlignTop|Qt::AlignRight);
-    ui->widget_2->replot();
-
-    n = corrdata->get_ranking(3);
-    for(int i=0;i<corrdata->data_size();i++){
-        x[i] = corrdata->value(corrdata->sig_name(n),i);
-        y[i] = corrdata->value(corrdata->sig_name(0),i);
-    }
-
-    ui->widget_3->graph(0)->setData(x,y);
-    if(ui->checkBox_th->checkState()==Qt::Checked){
-        ui->widget_3->xAxis->setRange(corrdata->get_min(n,0.5,0,ui->V_threshold->text().toDouble()),corrdata->get_max(n,0.5,0,ui->V_threshold->text().toDouble()));
-        ui->widget_3->yAxis->setRange(corrdata->get_min(0,0.5,0,ui->V_threshold->text().toDouble()),corrdata->get_max(0,0.5,0,ui->V_threshold->text().toDouble()));
-    }else{
-        ui->widget_3->xAxis->setRange(corrdata->get_min(n,0.5),corrdata->get_max(n,0.5));
-        ui->widget_3->yAxis->setRange(corrdata->get_min(0,0.5),corrdata->get_max(0,0.5));
-
-    }
-    ui->widget_3->xAxis->setLabel(tr(corrdata->sig_name(n).c_str()));
-    ui->widget_3->yAxis->setLabel(tr(corrdata->sig_name(0).c_str()));
-    ui->widget_3->graph(0)->setName(QString("mic : %1").arg(corrdata->mic(n)));
-    ui->widget_3->legend->setVisible(true);
-    ui->widget_3->legend->setFont(legendFont);
-    ui->widget_3->legend->setBrush(QBrush(QColor(255,255,255,230)));
-    ui->widget_3->axisRect()->insetLayout()->setInsetAlignment(0,Qt::AlignTop|Qt::AlignRight);
-    ui->widget_3->replot();
+    plot->xAxis->setLabel(tr(corrdata->sig_name(n).c_str()));
+    plot->yAxis->setLabel(tr(corrdata->sig_name(0).c_str()));
+    plot->graph(0)->setName(QString("mic : %1").arg(corrdata->mic(n)));
+    plot->legend->setVisible(true);
+    plot->legend->setFont(legendFont);
+    plot->legend->setBrush(QBrush(QColor(255,255,255,230)));
+    plot->axisRect()->insetLayout()->setInsetAlignment(0,Qt::AlignTop|Qt::AlignRight);
+    plot->replot();
 
 }
-
 void MainWindow::on_treeWidget_itemDoubleClicked(QTreeWidgetItem *item, int column)
 {
     cerr<<column<<item->text(column).toStdString()<<endl;
@@ -242,5 +201,32 @@ void MainWindow::update_data()
     cerr<<"CHECK BOX = "<<ui->checkBox->checkState()<<endl;
     if(ui->checkBox->checkState()==0)return;
     ui->dateTimeEdit->setDateTime(QDateTime::currentDateTime());
-    on_pushButton_clicked();
+    //on_pushButton_clicked();
+    corrdata->add_tag(ui->dateTimeEdit->dateTime().toString("yyyy/MM/dd HH:mm:ss").toStdString());
+    corrdata->add_db_get_sync_data();
+
+    cerr<<"*Data size = "<<corrdata->data_size()<<endl;
+
+    if(ui->checkBox_add->checkState()!=Qt::Checked
+            && corrdata->data_size()>ui->spinBox->value()){
+        corrdata->erase(corrdata->data_size()-ui->spinBox->value());
+        cerr<<"***Data size = "<<corrdata->data_size()<<endl;
+    }
+
+
+    if(ui->checkBox_th->checkState()==Qt::Checked){
+        corrdata->calc_mic(ui->V_threshold->text().toDouble());
+    }else{
+        corrdata->calc_mic();
+    }
+    for(int j=0;j<corrdata->sig_size();j++){
+        cerr<<" "<<j<<"  "<<
+              corrdata->sig_name(j)<<"  "<<
+              corrdata->mic(j)<<endl;
+    }
+
+    plot_data(ui->widget_1,corrdata->get_ranking(1));
+    plot_data(ui->widget_2,corrdata->get_ranking(2));
+    plot_data(ui->widget_3,corrdata->get_ranking(3));
+
 }

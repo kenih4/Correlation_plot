@@ -4,6 +4,7 @@
 #include <QMainWindow>
 #include <QTreeWidget>
 #include "corr_data.h"
+#include "qcustomplot.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -24,6 +25,7 @@ private slots:
     void on_listWidget_doubleClicked(const QModelIndex &index);
     void on_pushButton_2_clicked();
     void update_data();
+    void plot_data(QCustomPlot *plot,int n);
 
 private:
     Ui::MainWindow *ui;
