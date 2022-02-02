@@ -155,11 +155,27 @@ void Corr_data::calc_mic()
     MINE *mine;
     double *x,*y;
     int n;
+    double alpha=0.85;
     for(int i=0;i<(int)sig.size();i++){
-        mine = new MINE(0.6, 15, EST_MIC_APPROX);
         n = size;
         x = new double [n];
         y = new double [n];
+        if(n>=2500){
+            alpha = 0.55;
+        }else if(n>=1000){
+            alpha = 0.6;
+        }else if(n>=500){
+            alpha = 0.65;
+        }else if(n>=250){
+            alpha = 0.7;
+        }else if(n>=50){
+            alpha = 0.75;
+        }else if(n>=25){
+            alpha = 0.8;
+        }else{
+            alpha = 0.85;
+        }
+        mine = new MINE(alpha, 15, EST_MIC_APPROX);
         for(int j=0;j<n;j++){
             x[j] = data[j].value[sig[0].name];
             y[j] = data[j].value[sig[i].name];
@@ -176,15 +192,32 @@ void Corr_data::calc_mic(double th)
     MINE *mine;
     double *x,*y;
     int n = 0,m = 0;
+    double alpha=0.85;
     for(int i=0;i<(int)size;i++){
         if(data[i].value[sig[0].name]>th){
             n++;
         }
     }
     for(int i=0;i<(int)sig.size();i++){
-        mine = new MINE(0.6, 15, EST_MIC_APPROX);
         x = new double [n];
         y = new double [n];
+        if(m>=2500){
+            alpha = 0.55;
+        }else if(n>=1000){
+            alpha = 0.6;
+        }else if(n>=500){
+            alpha = 0.65;
+        }else if(n>=250){
+            alpha = 0.7;
+        }else if(n>=50){
+            alpha = 0.75;
+        }else if(n>=25){
+            alpha = 0.8;
+        }else{
+            alpha = 0.85;
+        }
+        mine = new MINE(alpha, 15, EST_MIC_APPROX);
+
         m = 0;
         for(int j=0;j<(int)size;j++){
             if(data[j].value[sig[0].name]>th){
@@ -193,6 +226,8 @@ void Corr_data::calc_mic(double th)
                 m++;
             }
         }
+
+
         mine->compute_score(x,y,n);
         sig[i].coefficient = mine->mic();
         delete mine;
@@ -316,7 +351,7 @@ void Corr_data::erase(int n)
         size-=1;
     }
 }
-void Corr_data::add_tag(string strtime)
+int Corr_data::add_tag(string strtime)
 {
     string endtime,begtime;
     string sep5u = "sr_mon_screen_sep5u_otr/intensity";
@@ -341,7 +376,7 @@ void Corr_data::add_tag(string strtime)
         endtime = strtime;
         begtime = data.back().end_time;
     }else{
-        return;
+        return 0;
     }
 
 
@@ -374,13 +409,22 @@ void Corr_data::add_tag(string strtime)
                         break;
                     }
                 }
+                cerr<<"beg = "<<data[i+org_size].beg_time<<
+                      "  end = "<<data[i+org_size].end_time<<
+                      "  sacla = "<<data[i+org_size].sacla_tag<<
+                      "  sr = "<<data[i+org_size].sr_tag<<endl;
+                if(data[i+org_size].sr_tag==0){
+                    data.erase(data.end()-1);
+                    size-=1;
+                    get_inf_cnt_sep5u-=1;
+                }
                 free(get_inf_route);
             }
         }
         free(get_inf_sep5u);
     }
     sort(data.begin(),data.end());
-
+    return get_inf_cnt_sep5u;
 }
 
 void Corr_data::add_db_get_sync_data()

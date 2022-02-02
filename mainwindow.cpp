@@ -198,18 +198,19 @@ void MainWindow::on_pushButton_2_clicked()
 
 void MainWindow::update_data()
 {
-    cerr<<"CHECK BOX = "<<ui->checkBox->checkState()<<endl;
     if(ui->checkBox->checkState()==0)return;
+
     ui->dateTimeEdit->setDateTime(QDateTime::currentDateTime());
-    //on_pushButton_clicked();
-    corrdata->add_tag(ui->dateTimeEdit->dateTime().toString("yyyy/MM/dd HH:mm:ss").toStdString());
+    int cnt = corrdata->add_tag(ui->dateTimeEdit->dateTime().toString("yyyy/MM/dd HH:mm:ss").toStdString());
     corrdata->add_db_get_sync_data();
 
-    cerr<<"*Data size = "<<corrdata->data_size()<<endl;
+    if(cnt>0)
+        cerr<<"*Data size = "<<corrdata->data_size()<<endl;
 
     if(ui->checkBox_add->checkState()!=Qt::Checked
             && corrdata->data_size()>ui->spinBox->value()){
         corrdata->erase(corrdata->data_size()-ui->spinBox->value());
+        if(cnt>0)
         cerr<<"***Data size = "<<corrdata->data_size()<<endl;
     }
 
@@ -219,6 +220,7 @@ void MainWindow::update_data()
     }else{
         corrdata->calc_mic();
     }
+    if(cnt>0)
     for(int j=0;j<corrdata->sig_size();j++){
         cerr<<" "<<j<<"  "<<
               corrdata->sig_name(j)<<"  "<<

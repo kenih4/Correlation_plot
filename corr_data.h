@@ -67,7 +67,7 @@ public:
     void append();
     void erase();
     void erase(int n);
-    void add_tag(string strtime);
+    int add_tag(string strtime);
     void add_db_get_sync_data();
 
 private:
