@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1023</width>
-    <height>596</height>
+    <width>990</width>
+    <height>842</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -15,6 +15,26 @@
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QGridLayout" name="gridLayout">
+    <item row="0" column="2" rowspan="5">
+     <widget class="QListWidget" name="listWidget"/>
+    </item>
+    <item row="3" column="0">
+     <widget class="QLineEdit" name="V_threshold"/>
+    </item>
+    <item row="4" column="1">
+     <widget class="QCheckBox" name="checkBox_add">
+      <property name="text">
+       <string>Add</string>
+      </property>
+     </widget>
+    </item>
+    <item row="0" column="1">
+     <widget class="QPushButton" name="pushButton_2">
+      <property name="text">
+       <string>Now</string>
+      </property>
+     </widget>
+    </item>
     <item row="0" column="0">
      <widget class="QPushButton" name="pushButton">
       <property name="text">
@@ -22,14 +42,32 @@
       </property>
      </widget>
     </item>
-    <item row="2" column="1">
-     <widget class="QCheckBox" name="checkBox">
-      <property name="text">
-       <string>Auto reload</string>
-      </property>
+    <item row="0" column="3" rowspan="6">
+     <widget class="QTreeWidget" name="treeWidget">
+      <column>
+       <property name="text">
+        <string notr="true">1</string>
+       </property>
+      </column>
      </widget>
     </item>
-    <item row="8" column="0" rowspan="2" colspan="5">
+    <item row="9" column="0" colspan="5">
+     <layout class="QHBoxLayout" name="horizontalLayout_3">
+      <property name="rightMargin">
+       <number>0</number>
+      </property>
+      <item>
+       <widget class="QCustomPlot" name="widget_7" native="true"/>
+      </item>
+      <item>
+       <widget class="QCustomPlot" name="widget_8" native="true"/>
+      </item>
+      <item>
+       <widget class="QCustomPlot" name="widget_9" native="true"/>
+      </item>
+     </layout>
+    </item>
+    <item row="7" column="0" colspan="5">
      <layout class="QHBoxLayout" name="horizontalLayout">
       <item>
        <widget class="QCustomPlot" name="widget_1" native="true"/>
@@ -41,31 +79,6 @@
        <widget class="QCustomPlot" name="widget_3" native="true"/>
       </item>
      </layout>
-    </item>
-    <item row="6" column="4">
-     <spacer name="horizontalSpacer">
-      <property name="orientation">
-       <enum>Qt::Horizontal</enum>
-      </property>
-      <property name="sizeHint" stdset="0">
-       <size>
-        <width>268</width>
-        <height>20</height>
-       </size>
-      </property>
-     </spacer>
-    </item>
-    <item row="0" column="2" rowspan="6">
-     <widget class="QListWidget" name="listWidget"/>
-    </item>
-    <item row="0" column="3" rowspan="7">
-     <widget class="QTreeWidget" name="treeWidget">
-      <column>
-       <property name="text">
-        <string notr="true">1</string>
-       </property>
-      </column>
-     </widget>
     </item>
     <item row="1" column="0" colspan="2">
      <widget class="QDateTimeEdit" name="dateTimeEdit">
@@ -87,20 +100,10 @@
       </property>
      </widget>
     </item>
-    <item row="3" column="0">
-     <widget class="QLineEdit" name="V_threshold"/>
-    </item>
-    <item row="6" column="2">
-     <widget class="QPushButton" name="pushButton_delete">
+    <item row="2" column="1">
+     <widget class="QCheckBox" name="checkBox">
       <property name="text">
-       <string>Delete</string>
-      </property>
-     </widget>
-    </item>
-    <item row="0" column="1">
-     <widget class="QPushButton" name="pushButton_2">
-      <property name="text">
-       <string>Now</string>
+       <string>Auto reload</string>
       </property>
      </widget>
     </item>
@@ -111,10 +114,23 @@
       </property>
      </widget>
     </item>
-    <item row="4" column="1">
-     <widget class="QCheckBox" name="checkBox_add">
+    <item row="2" column="4">
+     <spacer name="horizontalSpacer">
+      <property name="orientation">
+       <enum>Qt::Horizontal</enum>
+      </property>
+      <property name="sizeHint" stdset="0">
+       <size>
+        <width>268</width>
+        <height>20</height>
+       </size>
+      </property>
+     </spacer>
+    </item>
+    <item row="5" column="2">
+     <widget class="QPushButton" name="pushButton_delete">
       <property name="text">
-       <string>Add</string>
+       <string>Delete</string>
       </property>
      </widget>
     </item>
@@ -125,7 +141,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>1023</width>
+     <width>990</width>
      <height>20</height>
     </rect>
    </property>

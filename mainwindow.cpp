@@ -30,6 +30,21 @@ MainWindow::MainWindow(QWidget *parent)
     ui->widget_3->graph(0)->setLineStyle(QCPGraph::lsNone);
     ui->widget_3->graph(0)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle, Qt::red, Qt::white, 5));
 
+    ui->widget_7->addGraph();
+    ui->widget_7->graph(0)->setPen(QPen(Qt::red));
+    ui->widget_7->graph(0)->setLineStyle(QCPGraph::lsNone);
+    ui->widget_7->graph(0)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle, Qt::red, Qt::white, 5));
+
+    ui->widget_8->addGraph();
+    ui->widget_8->graph(0)->setPen(QPen(Qt::red));
+    ui->widget_8->graph(0)->setLineStyle(QCPGraph::lsNone);
+    ui->widget_8->graph(0)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle, Qt::red, Qt::white, 5));
+
+    ui->widget_9->addGraph();
+    ui->widget_9->graph(0)->setPen(QPen(Qt::red));
+    ui->widget_9->graph(0)->setLineStyle(QCPGraph::lsNone);
+    ui->widget_9->graph(0)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle, Qt::red, Qt::white, 5));
+
     ui->listWidget->addItem("sr_safety_topup_intlk_beam/efficiency");
     ui->listWidget->addItem("xfel_mon_bpm_xsbt_3_x/position");
     ui->listWidget->addItem("xfel_mon_bpm_xsbt_3_y/position");
@@ -99,6 +114,9 @@ void MainWindow::on_pushButton_clicked()
     plot_data(ui->widget_1,corrdata->get_ranking(1));
     plot_data(ui->widget_2,corrdata->get_ranking(2));
     plot_data(ui->widget_3,corrdata->get_ranking(3));
+    plot_data(ui->widget_7,corrdata->get_ranking(4));
+    plot_data(ui->widget_8,corrdata->get_ranking(5));
+    plot_data(ui->widget_9,corrdata->get_ranking(6));
 
 }
 void MainWindow::plot_data(QCustomPlot *plot,int n)
@@ -230,5 +248,8 @@ void MainWindow::update_data()
     plot_data(ui->widget_1,corrdata->get_ranking(1));
     plot_data(ui->widget_2,corrdata->get_ranking(2));
     plot_data(ui->widget_3,corrdata->get_ranking(3));
+    plot_data(ui->widget_7,corrdata->get_ranking(4));
+    plot_data(ui->widget_8,corrdata->get_ranking(5));
+    plot_data(ui->widget_9,corrdata->get_ranking(6));
 
 }
