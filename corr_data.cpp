@@ -321,6 +321,8 @@ int Corr_data::get_ranking(int ranking)
         for(int j=0;j<(int)sig.size();j++){
             if(i!=j && sig[i].coefficient<sig[j].coefficient){
                 rank[i]++;
+            }else if(i>j && sig[i].coefficient==sig[j].coefficient){
+                rank[i]++;
             }
         }
     }

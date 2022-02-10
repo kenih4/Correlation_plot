@@ -65,7 +65,7 @@ MainWindow::MainWindow(QWidget *parent)
     create_tree();
     ui->V_threshold->setText(QString::number(0));
     timer = new QTimer(this);
-    timer->setInterval(6000);
+    timer->setInterval(60000);
     connect(timer, SIGNAL(timeout()), this, SLOT(update_data()));
     timer->start();
     corrdata = new Corr_data(ui->spinBox->value());
@@ -146,6 +146,8 @@ void MainWindow::plot_data(QCustomPlot *plot,int n)
     plot->legend->setFont(legendFont);
     plot->legend->setBrush(QBrush(QColor(255,255,255,230)));
     plot->axisRect()->insetLayout()->setInsetAlignment(0,Qt::AlignTop|Qt::AlignRight);
+    plot->setInteractions(QCP::iRangeDrag|QCP::iRangeZoom);
+
     plot->replot();
 
 }
