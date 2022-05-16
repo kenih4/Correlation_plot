@@ -147,7 +147,7 @@ void Corr_data::db_get_sync_data()
         }
     }
     db_release_signal_list_all(&siglist);
-
+    sort(data.begin(),data.end());
 }
 
 void Corr_data::calc_mic()
@@ -310,10 +310,21 @@ double Corr_data::get_min(int n,double ratio,int a,double th)
     return ret;
 }
 
+int Corr_data::get_ranking(int ranking,bool flg){
+    int ret;
+    if(flg == false && rank.size() == sig.size()){
+        for(int i=0;i<(int)sig.size();i++){
+            if(rank[i] == ranking)ret = i;
+        }
+
+    }else{
+        ret = get_ranking(ranking);
+    }
+    return ret;
+}
 int Corr_data::get_ranking(int ranking)
 {
     int ret = 0;
-    vector<int> rank;
     rank.resize((int)sig.size());
 
     for(int i=0;i<(int)sig.size();i++){

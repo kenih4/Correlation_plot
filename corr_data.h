@@ -64,16 +64,18 @@ public:
     double get_max(int n,double ratio,int a,double th);
     double get_min(int n,double ratio,int a,double th);
     int get_ranking(int ranking);
+    int get_ranking(int ranking,bool flg);
     void append();
     void erase();
     void erase(int n);
     int add_tag(string strtime);
     void add_db_get_sync_data();
-
+    void rank_init(){rank.resize(0);};
 private:
     int size;
     vector <Signal_param> sig;
     vector<Data> data;
+    vector<int> rank;
 };
 
 #endif // CORR_DATA_H

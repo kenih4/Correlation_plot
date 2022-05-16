@@ -26,6 +26,7 @@ private slots:
     void on_pushButton_2_clicked();
     void update_data();
     void plot_data(QCustomPlot *plot,int n);
+    void plot_init(QCustomPlot *plot);
 
 private:
     Ui::MainWindow *ui;
