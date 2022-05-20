@@ -19,6 +19,7 @@ typedef struct Data{
     string beg_time;
     string end_time;
     map <string,double>value;
+    map <string,double>denominator;
     bool operator<(const Data &right)const {
         return sacla_tag == right.sacla_tag ? sr_tag < right.sr_tag : sacla_tag < right.sacla_tag;
     }
@@ -45,11 +46,19 @@ public:
         sig.push_back(s);
         }
     };
+    void add_signal_d(string signal){
+        Signal_param s = {signal,0};
+        if(find(sig_d.begin(),sig_d.end(),s)==sig_d.end()){
+        sig_d.push_back(s);
+        }
+    };
     void db_get_sync_data();
     int data_size(){return size;};
     int sig_size(){return sig.size();};
     string sig_name(int n){return sig[n].name;};
+    string sig_d_name(int n){return sig_d[n].name;};
     double value(string signame,int n){return data[n].value[signame];};
+    double denominator(string signame,int n){return data[n].denominator[signame];};
     string begtime(int n){return data[n].beg_time;};
     string endtime(int n){return data[n].end_time;};
     int64_t sacla_tag(int n){return data[n].sacla_tag;};
@@ -74,6 +83,7 @@ public:
 private:
     int size;
     vector <Signal_param> sig;
+    vector <Signal_param> sig_d;
     vector<Data> data;
     vector<int> rank;
 };

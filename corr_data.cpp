@@ -148,6 +148,40 @@ void Corr_data::db_get_sync_data()
     }
     db_release_signal_list_all(&siglist);
     sort(data.begin(),data.end());
+
+    status = db_init_signal_list(&siglist);
+    if(status == 0){
+        for(auto itr = sig_d.begin();itr != sig_d.end(); ++itr){
+            status = db_add_signal_list(&siglist,itr->name.c_str());
+            if(status != 0){
+                printf("err db_add_signal_list :: %s\n",itr->name.c_str());
+                sig_d.erase(itr);
+                itr--;
+            }
+        }
+    }
+    cerr<<"num_siglist  =  "<<siglist.num_signal<<endl;
+    for(int n=0;n<size;n++){
+        status = db_get_data_multi(&siglist,data[n].beg_time.c_str(),data[n].end_time.c_str(),1,0);
+        if(status == 0){
+            for(int i=0;i<(int)sig_d.size();i++){
+                for(int j=0;j<siglist.num_signal;j++){
+                    if(sig_d[i].name.compare(siglist.signal_list[j].sig_name)==0){
+                        tData = &siglist.signal_list[j];
+                        fdata = (Db_f_data*)tData->data;
+                        for(int m=0;m<tData->num_data;m++){
+                            if(fdata[m].evno == data[n].sacla_tag||
+                                    fdata[m].evno == data[n].sr_tag){
+                                data[n].denominator[sig_d[i].name] = fdata[m].fdata;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    db_release_signal_list_all(&siglist);
+
 }
 
 void Corr_data::calc_mic()
@@ -473,6 +507,43 @@ void Corr_data::add_db_get_sync_data()
                                 if(fdata[m].evno == data[n].sacla_tag||
                                         fdata[m].evno == data[n].sr_tag){
                                     data[n].value[sig[i].name] = fdata[m].fdata;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            db_release_signal_list_all(&siglist);
+        }
+    }
+
+    for(int n=0;n<size;n++){
+        status = db_init_signal_list(&siglist);
+        if(status == 0){
+            for(auto itr = sig_d.begin();itr != sig_d.end(); ++itr){
+                if(data[n].denominator.count(itr->name)==0){
+                    status = db_add_signal_list(&siglist,itr->name.c_str());
+                    if(status != 0){
+                        printf("err db_add_signal_list :: %s\n",itr->name.c_str());
+                        sig_d.erase(itr);
+                        itr--;
+                    }
+                }
+            }
+        }
+        if(siglist.num_signal>0){
+            status = db_get_data_multi(&siglist,data[n].beg_time.c_str(),data[n].end_time.c_str(),1,0);
+            if(status == 0){
+                for(int i=0;i<(int)sig_d.size();i++){
+                    for(int j=0;j<siglist.num_signal;j++){
+                        if(sig_d[i].name.compare(siglist.signal_list[j].sig_name)==0){
+                            tData = &siglist.signal_list[j];
+                            fdata = (Db_f_data*)tData->data;
+                            for(int m=0;m<tData->num_data;m++){
+                                if(fdata[m].evno == data[n].sacla_tag||
+                                        fdata[m].evno == data[n].sr_tag){
+                                    data[n].denominator[sig_d[i].name] = fdata[m].fdata;
                                 }
                             }
                         }

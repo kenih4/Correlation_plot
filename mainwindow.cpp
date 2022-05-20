@@ -58,6 +58,7 @@ void MainWindow::on_pushButton_clicked()
     for(int i= 0;i<ui->listWidget->count();++i){
         corrdata->add_signal(ui->listWidget->item(i)->text().toStdString().c_str());
     }
+    corrdata->add_signal_d("sr_mon_bpm_xsbt_20_sum/charge");
 
     corrdata->get_tag(ui->dateTimeEdit->dateTime().toString("yyyy/MM/dd HH:mm:ss").toStdString());
     corrdata->db_get_sync_data();
@@ -114,24 +115,25 @@ void MainWindow::plot_data(QCustomPlot *plot,int n)
     QVector<double> x(corrdata->data_size()),y(corrdata->data_size());
     QFont legendFont = font();
     legendFont.setPointSize(9);
-    cerr<<"****  "<<corrdata->sig_name(n)<<"  1****"<<endl;
+//    cerr<<"****  "<<corrdata->sig_name(n)<<"  1****"<<endl;
     for(int i=0;i<corrdata->data_size();i++){
-        x[i] = corrdata->value(corrdata->sig_name(n),i);
-        y[i] = corrdata->value(corrdata->sig_name(0),i);
+        //x[i] = corrdata->value(corrdata->sig_name(n),i);
+        x[i] = corrdata->sacla_tag(i);
+        y[i] = corrdata->value(corrdata->sig_name(0),i)/(corrdata->denominator(corrdata->sig_d_name(0),i)*1e-9/(1.60219e-19))*100;
     }
-    cerr<<"****  "<<corrdata->sig_name(n)<<"  2****"<<endl;
+//    cerr<<"****  "<<corrdata->sig_name(n)<<"  2****"<<endl;
     plot->graph(0)->setData(x,y);
 
     QVector<double> x2(1),y2(1);
-    x2[0] = corrdata->value(corrdata->sig_name(n),(corrdata->data_size()-2));
-    y2[0] = corrdata->value(corrdata->sig_name(0),(corrdata->data_size()-2));
+    x2[0] = x[corrdata->data_size()-2];
+    y2[0] = y[corrdata->data_size()-2];
     plot->graph(1)->setData(x2,y2);
 
     QVector<double> x3(1),y3(1);
-    x3[0] = corrdata->value(corrdata->sig_name(n),(corrdata->data_size()-1));
-    y3[0] = corrdata->value(corrdata->sig_name(0),(corrdata->data_size()-1));
+    x3[0] = x[corrdata->data_size()-1];
+    y3[0] = y[corrdata->data_size()-1];
     plot->graph(2)->setData(x3,y3);
-    cerr<<"****  "<<corrdata->sig_name(n)<<"  2****"<<endl;
+//    cerr<<"****  "<<corrdata->sig_name(n)<<"  2****"<<endl;
 
 
     if(ui->checkBox_th->checkState()==Qt::Checked){
@@ -142,16 +144,14 @@ void MainWindow::plot_data(QCustomPlot *plot,int n)
         plot->yAxis->setRange(corrdata->get_min(0,0.5),corrdata->get_max(0,0.5));
 
     }
-    cerr<<"****  "<<corrdata->sig_name(n)<<"  3****"<<endl;
+plot->yAxis->setRange(0,100);
+plot->graph(0)->rescaleAxes(true);
+//    cerr<<"****  "<<corrdata->sig_name(n)<<"  3****"<<endl;
     plot->xAxis->setLabel(tr(corrdata->sig_name(n).c_str()));
     plot->yAxis->setLabel(tr(corrdata->sig_name(0).c_str()));
-//    plot->graph(0)->setName(QString("mic : %1").arg(corrdata->mic(n)));
-//    plot->legend->setVisible(true);
-//    plot->legend->setFont(legendFont);
-//    plot->legend->setBrush(QBrush(QColor(255,255,255,230)));
     plot->axisRect()->insetLayout()->setInsetAlignment(0,Qt::AlignTop|Qt::AlignRight);
     plot->setInteractions(QCP::iRangeDrag|QCP::iRangeZoom);
-    cerr<<"****  "<<corrdata->sig_name(n)<<"  4****"<<endl;
+//    cerr<<"****  "<<corrdata->sig_name(n)<<"  4****"<<endl;
     QCPItemText *micValue = new QCPItemText(plot);
     micValue->setPositionAlignment(Qt::AlignTop|Qt::AlignHCenter);
     micValue->position->setType(QCPItemPosition::ptAxisRectRatio);
