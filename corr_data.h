@@ -36,20 +36,20 @@ typedef struct Signal_param{
 class Corr_data
 {
 public:
-    Corr_data(int data_num);
+    Corr_data(int data_num,int f);
     ~Corr_data();
     void get_tag(string endtime);
     void get_tag(string begtime,string endtime);
     void add_signal(string signal){
         Signal_param s = {signal,0};
         if(find(sig.begin(),sig.end(),s)==sig.end()){
-        sig.push_back(s);
+            sig.push_back(s);
         }
     };
     void add_signal_d(string signal){
         Signal_param s = {signal,0};
         if(find(sig_d.begin(),sig_d.end(),s)==sig_d.end()){
-        sig_d.push_back(s);
+            sig_d.push_back(s);
         }
     };
     void db_get_sync_data();
@@ -57,7 +57,13 @@ public:
     int sig_size(){return sig.size();};
     string sig_name(int n){return sig[n].name;};
     string sig_d_name(int n){return sig_d[n].name;};
-    double value(string signame,int n){return data[n].value[signame];};
+    double value(string signame,int n){
+        if(dflg != 0 && signame==sig[0].name){
+            return data[n].value[signame]/(data[n].denominator[sig_d[0].name]*1e-9/(1.60219e-19))*100;
+        }else{
+            return data[n].value[signame];
+        }
+    };
     double denominator(string signame,int n){return data[n].denominator[signame];};
     string begtime(int n){return data[n].beg_time;};
     string endtime(int n){return data[n].end_time;};
@@ -80,12 +86,14 @@ public:
     int add_tag(string strtime);
     void add_db_get_sync_data();
     void rank_init(){rank.resize(0);};
+    void set_flg(int f){dflg = f;cerr<<dflg<<endl;};
 private:
     int size;
     vector <Signal_param> sig;
     vector <Signal_param> sig_d;
     vector<Data> data;
     vector<int> rank;
+    int dflg;
 };
 
 #endif // CORR_DATA_H

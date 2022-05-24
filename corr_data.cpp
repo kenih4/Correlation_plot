@@ -1,10 +1,11 @@
 #include "corr_data.h"
 
-Corr_data::Corr_data(int data_num)
+Corr_data::Corr_data(int data_num,int f)
 {
     //sig.push_back({"sr_safety_topup_intlk_beam/efficiency",0});
     size = data_num;
     data.resize(size);
+    dflg = f;
 }
 
 Corr_data::~Corr_data(){
@@ -211,8 +212,8 @@ void Corr_data::calc_mic()
         }
         mine = new MINE(alpha, 15, EST_MIC_APPROX);
         for(int j=0;j<n;j++){
-            x[j] = data[j].value[sig[0].name];
-            y[j] = data[j].value[sig[i].name];
+            x[j] = value(sig[0].name,j);
+            y[j] = value(sig[i].name,j);
         }
         mine->compute_score(x,y,n);
         sig[i].coefficient = mine->mic();
@@ -228,7 +229,7 @@ void Corr_data::calc_mic(double th)
     int n = 0,m = 0;
     double alpha=0.85;
     for(int i=0;i<(int)size;i++){
-        if(data[i].value[sig[0].name]>th){
+        if(value(sig[0].name,i)>th){
             n++;
         }
     }
@@ -254,9 +255,9 @@ void Corr_data::calc_mic(double th)
 
         m = 0;
         for(int j=0;j<(int)size;j++){
-            if(data[j].value[sig[0].name]>th){
-                x[m] = data[j].value[sig[0].name];
-                y[m] = data[j].value[sig[i].name];
+            if( value(sig[0].name,j)>th){
+                x[m] = value(sig[0].name,j);
+                y[m] = value(sig[i].name,j);
                 m++;
             }
         }
@@ -272,30 +273,31 @@ void Corr_data::calc_mic(double th)
 
 double Corr_data::get_max(int n)
 {
-    double ret = data[0].value[sig[n].name];
+
+    double ret = value(sig[n].name,0);
     for(int i=1;i<size;i++){
-        if(ret<data[i].value[sig[n].name])ret = data[i].value[sig[n].name];
+        if(ret<value(sig[n].name,i))ret = value(sig[n].name,i);
     }
     return ret;
 }
 
 double Corr_data::get_min(int n)
 {
-    double ret = data[0].value[sig[n].name];
+    double ret = value(sig[n].name,0);
     for(int i=1;i<size;i++){
-        if(ret>data[i].value[sig[n].name])ret = data[i].value[sig[n].name];
+        if(ret>value(sig[n].name,i))ret = value(sig[n].name,i);
     }
     return ret;
 }
 
 double Corr_data::get_max(int n,double ratio)
 {
-    double max = data[0].value[sig[n].name];
-    double min = data[0].value[sig[n].name];
+    double max = value(sig[n].name,0);
+    double min = value(sig[n].name,0);
     double ret;
     for(int i=1;i<size;i++){
-        if(max<data[i].value[sig[n].name])max = data[i].value[sig[n].name];
-        if(min>data[i].value[sig[n].name])min = data[i].value[sig[n].name];
+        if(max<value(sig[n].name,i))max = value(sig[n].name,i);
+        if(min>value(sig[n].name,i))min = value(sig[n].name,i);
     }
     ret = max + (max - min) * ratio;
     return ret;
@@ -303,12 +305,12 @@ double Corr_data::get_max(int n,double ratio)
 
 double Corr_data::get_min(int n,double ratio)
 {
-    double max = data[0].value[sig[n].name];
-    double min = data[0].value[sig[n].name];
+    double max = value(sig[n].name,0);
+    double min = value(sig[n].name,0);
     double ret;
     for(int i=1;i<size;i++){
-        if(max<data[i].value[sig[n].name])max = data[i].value[sig[n].name];
-        if(min>data[i].value[sig[n].name])min = data[i].value[sig[n].name];
+        if(max<value(sig[n].name,i))max = value(sig[n].name,i);
+        if(min>value(sig[n].name,i))min = value(sig[n].name,i);
     }
     ret = min - (max - min) * ratio;
     return ret;
@@ -316,13 +318,13 @@ double Corr_data::get_min(int n,double ratio)
 
 double Corr_data::get_max(int n,double ratio,int a,double th)
 {
-    double max = data[0].value[sig[n].name];
-    double min = data[0].value[sig[n].name];
+    double max = value(sig[n].name,0);
+    double min = value(sig[n].name,0);
     double ret;
     for(int i=1;i<size;i++){
-        if(data[i].value[sig[a].name]>th){
-            if(max<data[i].value[sig[n].name])max = data[i].value[sig[n].name];
-            if(min>data[i].value[sig[n].name])min = data[i].value[sig[n].name];
+        if(value(sig[a].name,i)>th){
+            if(max<value(sig[n].name,i))max = value(sig[n].name,i);
+            if(min>value(sig[n].name,i))min = value(sig[n].name,i);
         }
     }
     ret = max + (max - min) * ratio;
@@ -331,13 +333,13 @@ double Corr_data::get_max(int n,double ratio,int a,double th)
 
 double Corr_data::get_min(int n,double ratio,int a,double th)
 {
-    double max = data[0].value[sig[n].name];
-    double min = data[0].value[sig[n].name];
+    double max = value(sig[n].name,0);
+    double min = value(sig[n].name,0);
     double ret;
     for(int i=1;i<size;i++){
-        if(data[i].value[sig[a].name]>th){
-            if(max<data[i].value[sig[n].name])max = data[i].value[sig[n].name];
-            if(min>data[i].value[sig[n].name])min = data[i].value[sig[n].name];
+        if(value(sig[a].name,i)>th){
+            if(max<value(sig[n].name,i))max = value(sig[n].name,i);
+            if(min>value(sig[n].name,i))min = value(sig[n].name,i);
         }
     }
     ret = min - (max - min) * ratio;

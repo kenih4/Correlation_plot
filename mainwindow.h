@@ -27,6 +27,10 @@ private slots:
     void update_data();
     void plot_data(QCustomPlot *plot,int n);
     void plot_init(QCustomPlot *plot);
+    void plot_trend(QCustomPlot *plot);
+    void on_listWidget_2_doubleClicked(const QModelIndex &index);
+
+    void on_checkBox_calc_stateChanged(int arg1);
 
 private:
     Ui::MainWindow *ui;

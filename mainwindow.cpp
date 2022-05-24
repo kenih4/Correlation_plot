@@ -1,5 +1,6 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
+#include <qdatetime.h>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -10,7 +11,7 @@ MainWindow::MainWindow(QWidget *parent)
     cerr << "#### DB Init : " << status << endl;
     if(DB_OK != status)
     {
-             exit(1);
+        exit(1);
     }
     ui->dateTimeEdit->setDateTime(QDateTime::currentDateTime());
     ui->dateTimeEdit->setDisplayFormat(tr("yyyy/MM/dd HH:mm:ss"));
@@ -21,9 +22,9 @@ MainWindow::MainWindow(QWidget *parent)
     plot_init(ui->widget_7);
     plot_init(ui->widget_8);
     plot_init(ui->widget_9);
+    plot_init(ui->widget);
 
-
-//    ui->listWidget->addItem("sr_safety_topup_intlk_beam/efficiency");
+    //    ui->listWidget->addItem("sr_safety_topup_intlk_beam/efficiency");
     ui->listWidget->addItem("sr_safety_topup_intlk_beam_sr_dcct1/charge_diff");
     ui->listWidget->addItem("xfel_mon_bpm_xsbt_3_x/position");
     ui->listWidget->addItem("xfel_mon_bpm_xsbt_5_x/position");
@@ -33,6 +34,8 @@ MainWindow::MainWindow(QWidget *parent)
     ui->listWidget->addItem("xfel_mon_msbpm_bc2_x/position");
     ui->listWidget->addItem("xfel_mon_msbpm_bc3_x/position");
 
+    ui->listWidget_2->addItem("sr_mon_bpm_xsbt_20_sum/charge");
+    ui->listWidget_2->addItem("sr_mon_bpm_xsbt_21_sum/charge");
 
 
     create_tree();
@@ -41,7 +44,7 @@ MainWindow::MainWindow(QWidget *parent)
     timer->setInterval(10000);
     connect(timer, SIGNAL(timeout()), this, SLOT(update_data()));
     timer->start();
-    corrdata = new Corr_data(ui->spinBox->value());
+    corrdata = new Corr_data(ui->spinBox->value(),ui->checkBox_calc->checkState());
 }
 
 MainWindow::~MainWindow()
@@ -53,12 +56,16 @@ MainWindow::~MainWindow()
 void MainWindow::on_pushButton_clicked()
 {
     delete corrdata;
-    corrdata = new Corr_data(ui->spinBox->value());
+    corrdata = new Corr_data(ui->spinBox->value(),ui->checkBox_calc->checkState());
 
     for(int i= 0;i<ui->listWidget->count();++i){
         corrdata->add_signal(ui->listWidget->item(i)->text().toStdString().c_str());
     }
-    corrdata->add_signal_d("sr_mon_bpm_xsbt_20_sum/charge");
+    for(int i= 0;i<ui->listWidget_2->count();++i){
+        corrdata->add_signal_d(ui->listWidget_2->item(i)->text().toStdString().c_str());
+
+    }
+//    corrdata->add_signal_d("sr_mon_bpm_xsbt_20_sum/charge");
 
     corrdata->get_tag(ui->dateTimeEdit->dateTime().toString("yyyy/MM/dd HH:mm:ss").toStdString());
     corrdata->db_get_sync_data();
@@ -91,6 +98,7 @@ void MainWindow::on_pushButton_clicked()
     plot_data(ui->widget_7,corrdata->get_ranking(4));
     plot_data(ui->widget_8,corrdata->get_ranking(5));
     plot_data(ui->widget_9,corrdata->get_ranking(6));
+    plot_trend(ui->widget);
 
 }
 void MainWindow::plot_init(QCustomPlot *plot)
@@ -109,19 +117,21 @@ void MainWindow::plot_init(QCustomPlot *plot)
     plot->graph(2)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle, "#0000ff", "#0000ff", 7));
 
 }
-
-void MainWindow::plot_data(QCustomPlot *plot,int n)
+void MainWindow::plot_trend(QCustomPlot *plot)
 {
     QVector<double> x(corrdata->data_size()),y(corrdata->data_size());
     QFont legendFont = font();
     legendFont.setPointSize(9);
-//    cerr<<"****  "<<corrdata->sig_name(n)<<"  1****"<<endl;
+    QSharedPointer<QCPAxisTickerDateTime> dateTicker(new QCPAxisTickerDateTime);
+    dateTicker->setDateTimeFormat("HH:mm:ss");
+    plot->xAxis->setTicker(dateTicker);
+    //    cerr<<"****  "<<corrdata->sig_name(n)<<"  1****"<<endl;
     for(int i=0;i<corrdata->data_size();i++){
-        //x[i] = corrdata->value(corrdata->sig_name(n),i);
-        x[i] = corrdata->sacla_tag(i);
-        y[i] = corrdata->value(corrdata->sig_name(0),i)/(corrdata->denominator(corrdata->sig_d_name(0),i)*1e-9/(1.60219e-19))*100;
+        x[i] = QDateTime::fromString(QString::fromStdString(corrdata->endtime(i)),"yyyy/MM/dd HH:mm:ss.z").toSecsSinceEpoch();
+        y[i] = corrdata->value(corrdata->sig_name(0),i);
+//        y[i] = corrdata->value(corrdata->sig_name(0),i)/(corrdata->denominator(corrdata->sig_d_name(0),i)*1e-9/(1.60219e-19))*100;
     }
-//    cerr<<"****  "<<corrdata->sig_name(n)<<"  2****"<<endl;
+    //    cerr<<"****  "<<corrdata->sig_name(n)<<"  2****"<<endl;
     plot->graph(0)->setData(x,y);
 
     QVector<double> x2(1),y2(1);
@@ -133,7 +143,50 @@ void MainWindow::plot_data(QCustomPlot *plot,int n)
     x3[0] = x[corrdata->data_size()-1];
     y3[0] = y[corrdata->data_size()-1];
     plot->graph(2)->setData(x3,y3);
-//    cerr<<"****  "<<corrdata->sig_name(n)<<"  2****"<<endl;
+    //    cerr<<"****  "<<corrdata->sig_name(n)<<"  2****"<<endl;
+
+    if(ui->checkBox_th->checkState()==Qt::Checked){
+        plot->yAxis->setRange(corrdata->get_min(0,0.5,0,ui->V_threshold->text().toDouble()),corrdata->get_max(0,0.5,0,ui->V_threshold->text().toDouble()));
+    }else{
+        plot->yAxis->setRange(corrdata->get_min(0,0.5),corrdata->get_max(0,0.5));
+
+    }
+    plot->xAxis->setRange(x[0]-60,x[corrdata->data_size()-1]+60);
+    //plot->graph(0)->rescaleAxes(true);
+    //    cerr<<"****  "<<corrdata->sig_name(n)<<"  3****"<<endl;
+    plot->xAxis->setLabel(tr("time"));
+    plot->yAxis->setLabel(tr(corrdata->sig_name(0).c_str()));
+    plot->axisRect()->insetLayout()->setInsetAlignment(0,Qt::AlignTop|Qt::AlignRight);
+    plot->setInteractions(QCP::iRangeDrag|QCP::iRangeZoom);
+    //    cerr<<"****  "<<corrdata->sig_name(n)<<"  4****"<<endl;
+
+    plot->replot();
+}
+void MainWindow::plot_data(QCustomPlot *plot,int n)
+{
+    QVector<double> x(corrdata->data_size()),y(corrdata->data_size());
+    QFont legendFont = font();
+    legendFont.setPointSize(9);
+
+    //    cerr<<"****  "<<corrdata->sig_name(n)<<"  1****"<<endl;
+    for(int i=0;i<corrdata->data_size();i++){
+        x[i] = corrdata->value(corrdata->sig_name(n),i);
+        y[i] = corrdata->value(corrdata->sig_name(0),i);
+//        y[i] = corrdata->value(corrdata->sig_name(0),i)/(corrdata->denominator(corrdata->sig_d_name(0),i)*1e-9/(1.60219e-19))*100;
+    }
+    //    cerr<<"****  "<<corrdata->sig_name(n)<<"  2****"<<endl;
+    plot->graph(0)->setData(x,y);
+
+    QVector<double> x2(1),y2(1);
+    x2[0] = x[corrdata->data_size()-2];
+    y2[0] = y[corrdata->data_size()-2];
+    plot->graph(1)->setData(x2,y2);
+
+    QVector<double> x3(1),y3(1);
+    x3[0] = x[corrdata->data_size()-1];
+    y3[0] = y[corrdata->data_size()-1];
+    plot->graph(2)->setData(x3,y3);
+    //    cerr<<"****  "<<corrdata->sig_name(n)<<"  2****"<<endl;
 
 
     if(ui->checkBox_th->checkState()==Qt::Checked){
@@ -144,14 +197,13 @@ void MainWindow::plot_data(QCustomPlot *plot,int n)
         plot->yAxis->setRange(corrdata->get_min(0,0.5),corrdata->get_max(0,0.5));
 
     }
-plot->yAxis->setRange(0,100);
-plot->graph(0)->rescaleAxes(true);
-//    cerr<<"****  "<<corrdata->sig_name(n)<<"  3****"<<endl;
+
+    //    cerr<<"****  "<<corrdata->sig_name(n)<<"  3****"<<endl;
     plot->xAxis->setLabel(tr(corrdata->sig_name(n).c_str()));
     plot->yAxis->setLabel(tr(corrdata->sig_name(0).c_str()));
     plot->axisRect()->insetLayout()->setInsetAlignment(0,Qt::AlignTop|Qt::AlignRight);
     plot->setInteractions(QCP::iRangeDrag|QCP::iRangeZoom);
-//    cerr<<"****  "<<corrdata->sig_name(n)<<"  4****"<<endl;
+    //    cerr<<"****  "<<corrdata->sig_name(n)<<"  4****"<<endl;
     QCPItemText *micValue = new QCPItemText(plot);
     micValue->setPositionAlignment(Qt::AlignTop|Qt::AlignHCenter);
     micValue->position->setType(QCPItemPosition::ptAxisRectRatio);
@@ -245,7 +297,7 @@ void MainWindow::update_data()
             && corrdata->data_size()>ui->spinBox->value()){
         corrdata->erase(corrdata->data_size()-ui->spinBox->value());
         if(cnt>0)
-        cerr<<"***Data size = "<<corrdata->data_size()<<endl;
+            cerr<<"***Data size = "<<corrdata->data_size()<<endl;
     }
 
 
@@ -255,11 +307,11 @@ void MainWindow::update_data()
         corrdata->calc_mic();
     }
     if(cnt>0)
-    for(int j=0;j<corrdata->sig_size();j++){
-        cerr<<" "<<j<<"  "<<
-              corrdata->sig_name(j)<<"  "<<
-              corrdata->mic(j)<<endl;
-    }
+        for(int j=0;j<corrdata->sig_size();j++){
+            cerr<<" "<<j<<"  "<<
+                  corrdata->sig_name(j)<<"  "<<
+                  corrdata->mic(j)<<endl;
+        }
     bool b = true;
 
     if(ui->checkBox_fix->checkState()==Qt::Checked){
@@ -271,5 +323,21 @@ void MainWindow::update_data()
     plot_data(ui->widget_7,corrdata->get_ranking(4,b));
     plot_data(ui->widget_8,corrdata->get_ranking(5,b));
     plot_data(ui->widget_9,corrdata->get_ranking(6,b));
+    plot_trend(ui->widget);
 
+}
+
+void MainWindow::on_listWidget_2_doubleClicked(const QModelIndex &index)
+{
+    QListWidgetItem* currentItem = ui->listWidget_2->takeItem( index.row());
+    if ( NULL != currentItem )
+    {
+        ui->listWidget_2->insertItem(0,currentItem);
+    }
+}
+
+void MainWindow::on_checkBox_calc_stateChanged(int arg1)
+{
+    qDebug()<<arg1;
+    corrdata->set_flg(arg1);
 }
