@@ -31,11 +31,18 @@ private slots:
     void on_listWidget_2_doubleClicked(const QModelIndex &index);
 
     void on_checkBox_calc_stateChanged(int arg1);
+    bool save();
+    bool saveAs();
 
 private:
     Ui::MainWindow *ui;
     Corr_data *corrdata;
     QTimer *timer;
+    void createActions();
+    bool saveFile(const QString &fileName);
+    void setCurrentFile(const QString &fileName);
+    void createStatusBar();
+    QString curFile;
 
 };
 #endif // MAINWINDOW_H

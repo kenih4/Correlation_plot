@@ -45,6 +45,8 @@ MainWindow::MainWindow(QWidget *parent)
     connect(timer, SIGNAL(timeout()), this, SLOT(update_data()));
     timer->start();
     corrdata = new Corr_data(ui->spinBox->value(),ui->checkBox_calc->checkState());
+    createActions();
+    createStatusBar();
 
 
 }
@@ -350,4 +352,65 @@ void MainWindow::on_listWidget_2_doubleClicked(const QModelIndex &index)
 void MainWindow::on_checkBox_calc_stateChanged(int arg1)
 {
     corrdata->set_flg(arg1);
+}
+void MainWindow::createActions()
+{
+
+    QMenu *fileMenu = menuBar()->addMenu(tr("&File"));
+    //    QToolBar *fileToolBar = addToolBar(tr("File"));
+
+    const QIcon saveIcon = QIcon::fromTheme("document-save", QIcon(":/images/save.png"));
+    QAction *saveAct = new QAction(saveIcon, tr("&Save"), this);
+    saveAct->setShortcuts(QKeySequence::Save);
+    saveAct->setStatusTip(tr("Save the document to disk"));
+    connect(saveAct, &QAction::triggered, this, &MainWindow::save);
+    fileMenu->addAction(saveAct);
+    //    fileToolBar->addAction(saveAct);
+
+    fileMenu->addSeparator();
+
+    const QIcon exitIcon = QIcon::fromTheme("application-exit");
+    QAction *exitAct = fileMenu->addAction(exitIcon, tr("E&xit"), this, &QWidget::close);
+    exitAct->setShortcuts(QKeySequence::Quit);
+    exitAct->setStatusTip(tr("Exit the application"));
+
+}
+void MainWindow::createStatusBar()
+{
+    statusBar()->showMessage(tr("Ready"));
+}
+bool MainWindow::save()
+{
+    if (curFile.isEmpty()) {
+        return saveAs();
+    } else {
+        return saveFile(curFile);
+    }
+}
+
+bool MainWindow::saveAs()
+{
+    QFileDialog dialog(this);
+    dialog.setWindowModality(Qt::WindowModal);
+    dialog.setAcceptMode(QFileDialog::AcceptSave);
+    if (dialog.exec() != QDialog::Accepted)
+        return false;
+    return saveFile(dialog.selectedFiles().first());
+}
+bool MainWindow::saveFile(const QString &fileName)
+{
+
+    corrdata->outfile(fileName.toStdString());
+    statusBar()->showMessage(tr("File saved"), 2000);
+    return true;
+}
+void MainWindow::setCurrentFile(const QString &fileName)
+{
+    curFile = fileName;
+    setWindowModified(false);
+
+    QString shownName = curFile;
+    if (curFile.isEmpty())
+        shownName = "untitled.txt";
+    setWindowFilePath(shownName);
 }
