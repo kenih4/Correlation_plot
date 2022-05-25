@@ -45,6 +45,8 @@ MainWindow::MainWindow(QWidget *parent)
     connect(timer, SIGNAL(timeout()), this, SLOT(update_data()));
     timer->start();
     corrdata = new Corr_data(ui->spinBox->value(),ui->checkBox_calc->checkState());
+
+
 }
 
 MainWindow::~MainWindow()
@@ -65,7 +67,6 @@ void MainWindow::on_pushButton_clicked()
         corrdata->add_signal_d(ui->listWidget_2->item(i)->text().toStdString().c_str());
 
     }
-//    corrdata->add_signal_d("sr_mon_bpm_xsbt_20_sum/charge");
 
     corrdata->get_tag(ui->dateTimeEdit->dateTime().toString("yyyy/MM/dd HH:mm:ss").toStdString());
     corrdata->db_get_sync_data();
@@ -99,6 +100,7 @@ void MainWindow::on_pushButton_clicked()
     plot_data(ui->widget_8,corrdata->get_ranking(5));
     plot_data(ui->widget_9,corrdata->get_ranking(6));
     plot_trend(ui->widget);
+    corrdata->outfile("/home/xfel/xfelopr/users/ytajiri/data/corr.csv");
 
 }
 void MainWindow::plot_init(QCustomPlot *plot)
@@ -129,7 +131,7 @@ void MainWindow::plot_trend(QCustomPlot *plot)
     for(int i=0;i<corrdata->data_size();i++){
         x[i] = QDateTime::fromString(QString::fromStdString(corrdata->endtime(i)),"yyyy/MM/dd HH:mm:ss.z").toSecsSinceEpoch();
         y[i] = corrdata->value(corrdata->sig_name(0),i);
-//        y[i] = corrdata->value(corrdata->sig_name(0),i)/(corrdata->denominator(corrdata->sig_d_name(0),i)*1e-9/(1.60219e-19))*100;
+        //        y[i] = corrdata->value(corrdata->sig_name(0),i)/(corrdata->denominator(corrdata->sig_d_name(0),i)*1e-9/(1.60219e-19))*100;
     }
     //    cerr<<"****  "<<corrdata->sig_name(n)<<"  2****"<<endl;
     plot->graph(0)->setData(x,y);
@@ -154,8 +156,11 @@ void MainWindow::plot_trend(QCustomPlot *plot)
     plot->xAxis->setRange(x[0]-60,x[corrdata->data_size()-1]+60);
     //plot->graph(0)->rescaleAxes(true);
     //    cerr<<"****  "<<corrdata->sig_name(n)<<"  3****"<<endl;
-    plot->xAxis->setLabel(tr("time"));
+    plot->xAxis->setLabel("time");
     plot->yAxis->setLabel(tr(corrdata->sig_name(0).c_str()));
+    if(ui->checkBox_calc->checkState()==Qt::Checked){
+        plot->yAxis->setLabel("calc efficiency");
+    }
     plot->axisRect()->insetLayout()->setInsetAlignment(0,Qt::AlignTop|Qt::AlignRight);
     plot->setInteractions(QCP::iRangeDrag|QCP::iRangeZoom);
     //    cerr<<"****  "<<corrdata->sig_name(n)<<"  4****"<<endl;
@@ -172,7 +177,7 @@ void MainWindow::plot_data(QCustomPlot *plot,int n)
     for(int i=0;i<corrdata->data_size();i++){
         x[i] = corrdata->value(corrdata->sig_name(n),i);
         y[i] = corrdata->value(corrdata->sig_name(0),i);
-//        y[i] = corrdata->value(corrdata->sig_name(0),i)/(corrdata->denominator(corrdata->sig_d_name(0),i)*1e-9/(1.60219e-19))*100;
+        //        y[i] = corrdata->value(corrdata->sig_name(0),i)/(corrdata->denominator(corrdata->sig_d_name(0),i)*1e-9/(1.60219e-19))*100;
     }
     //    cerr<<"****  "<<corrdata->sig_name(n)<<"  2****"<<endl;
     plot->graph(0)->setData(x,y);
@@ -201,6 +206,9 @@ void MainWindow::plot_data(QCustomPlot *plot,int n)
     //    cerr<<"****  "<<corrdata->sig_name(n)<<"  3****"<<endl;
     plot->xAxis->setLabel(tr(corrdata->sig_name(n).c_str()));
     plot->yAxis->setLabel(tr(corrdata->sig_name(0).c_str()));
+    if(ui->checkBox_calc->checkState()==Qt::Checked){
+        plot->yAxis->setLabel("calc efficiency");
+    }
     plot->axisRect()->insetLayout()->setInsetAlignment(0,Qt::AlignTop|Qt::AlignRight);
     plot->setInteractions(QCP::iRangeDrag|QCP::iRangeZoom);
     //    cerr<<"****  "<<corrdata->sig_name(n)<<"  4****"<<endl;
@@ -324,6 +332,9 @@ void MainWindow::update_data()
     plot_data(ui->widget_8,corrdata->get_ranking(5,b));
     plot_data(ui->widget_9,corrdata->get_ranking(6,b));
     plot_trend(ui->widget);
+    if(cnt>0)
+        corrdata->outfile("/home/xfel/xfelopr/users/ytajiri/data/corr.csv");
+
 
 }
 
@@ -338,6 +349,5 @@ void MainWindow::on_listWidget_2_doubleClicked(const QModelIndex &index)
 
 void MainWindow::on_checkBox_calc_stateChanged(int arg1)
 {
-    qDebug()<<arg1;
     corrdata->set_flg(arg1);
 }

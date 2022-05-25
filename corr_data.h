@@ -87,6 +87,7 @@ public:
     void add_db_get_sync_data();
     void rank_init(){rank.resize(0);};
     void set_flg(int f){dflg = f;cerr<<dflg<<endl;};
+    void outfile(string);
 private:
     int size;
     vector <Signal_param> sig;

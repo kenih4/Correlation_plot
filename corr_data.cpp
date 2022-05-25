@@ -557,3 +557,45 @@ void Corr_data::add_db_get_sync_data()
         }
     }
 }
+#include <QFile>
+#include <QTextStream>
+#include <QDebug>
+#include <regex>
+
+void Corr_data::outfile(string fname)
+{
+    QFile fp(fname.c_str());
+    if(fp.open(QIODevice::WriteOnly)){
+        QTextStream out(&fp);
+        out << "sacla_tag"<<",";
+        out << "sr_tag"<<",";
+        out << "beg_time"<<",";
+        out << "end_time"<<",";
+        if(dflg != 0)out<<"("<<sig[0].name.c_str()<<")"<<"/"<<"("<<sig_d[0].name.c_str()<<")"<<"*1e-9/(1.60219e-19))*100"<<",";
+        for(int j=0;j<(int)sig.size();j++){
+            out << sig[j].name.c_str()<<",";
+        }
+        for(int j=0;j<(int)sig_d.size();j++){
+            out << sig_d[j].name.c_str()<<",";
+        }
+        out << endl;
+        for(int i=0;i<size;i++){
+            out << data[i].sacla_tag<<",";
+            out << data[i].sr_tag<<",";
+            out << regex_replace(data[i].beg_time,regex(" "),"-").c_str()<<",";
+            out << regex_replace(data[i].end_time,regex(" "),"-").c_str()<<",";
+            if(dflg != 0)out<<data[i].value[sig[0].name]/(data[i].denominator[sig_d[0].name]*1e-9/(1.60219e-19))*100<<",";
+            for(int j=0;j<(int)sig.size();j++){
+                out << data[i].value[sig[j].name]<<",";
+            }
+            for(int j=0;j<(int)sig_d.size();j++){
+                out << data[i].denominator[sig_d[j].name]<<",";
+            }
+            out << endl;
+        }
+        fp.close();
+    }else{
+        qWarning().noquote()<<"Cannot open file  "<<fname.c_str()<<endl;
+    }
+
+}
