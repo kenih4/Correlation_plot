@@ -36,7 +36,10 @@ MainWindow::MainWindow(QWidget *parent)
 
     ui->listWidget_2->addItem("sr_mon_bpm_xsbt_20_sum/charge");
     ui->listWidget_2->addItem("sr_mon_bpm_xsbt_21_sum/charge");
-
+    QFont lFont = font();
+    lFont.setBold(true);
+    ui->listWidget->item(0)->setFont(lFont);
+    ui->listWidget_2->item(0)->setFont(lFont);
 
     create_tree();
     ui->V_threshold->setText(QString::number(0));
@@ -47,7 +50,7 @@ MainWindow::MainWindow(QWidget *parent)
     corrdata = new Corr_data(ui->spinBox->value(),ui->checkBox_calc->checkState());
     createActions();
     createStatusBar();
-
+    ui->radioButton->setChecked(true);
 
 }
 
@@ -232,11 +235,20 @@ void MainWindow::on_treeWidget_itemDoubleClicked(QTreeWidgetItem *item, int colu
     cerr<<ui->listWidget->count()<<endl;
     cerr<<item->childCount()<<endl;
     if(item->childCount()!=0)return;
-    for(int i= 0;i<ui->listWidget->count();++i){
-        cerr<<ui->listWidget->item(i)->text().toStdString()<<endl;
-        if(ui->listWidget->item(i)->text().toStdString().compare(item->text(column).toStdString())==0)return;
+
+    if(ui->radioButton_2->isChecked()){
+        for(int i= 0;i<ui->listWidget_2->count();++i){
+            cerr<<ui->listWidget_2->item(i)->text().toStdString()<<endl;
+            if(ui->listWidget_2->item(i)->text().toStdString().compare(item->text(column).toStdString())==0)return;
+        }
+        ui->listWidget_2->addItem(item->text(column));
+    }else{
+        for(int i= 0;i<ui->listWidget->count();++i){
+            cerr<<ui->listWidget->item(i)->text().toStdString()<<endl;
+            if(ui->listWidget->item(i)->text().toStdString().compare(item->text(column).toStdString())==0)return;
+        }
+        ui->listWidget->addItem(item->text(column));
     }
-    ui->listWidget->addItem(item->text(column));
     corrdata->rank_init();
 }
 void MainWindow::create_tree()
@@ -269,10 +281,19 @@ void MainWindow::create_tree()
 
 void MainWindow::on_pushButton_delete_clicked()
 {
-    QListWidgetItem* currentItem = ui->listWidget->takeItem( ui->listWidget->currentRow());
-    if ( NULL != currentItem )
-    {
-        delete ( currentItem );
+    if(ui->radioButton_2->isChecked()){
+        QListWidgetItem* currentItem = ui->listWidget_2->takeItem( ui->listWidget_2->currentRow());
+        if ( NULL != currentItem )
+        {
+            delete ( currentItem );
+        }
+
+    }else{
+        QListWidgetItem* currentItem = ui->listWidget->takeItem( ui->listWidget->currentRow());
+        if ( NULL != currentItem )
+        {
+            delete ( currentItem );
+        }
     }
     corrdata->rank_init();
 }
@@ -280,10 +301,16 @@ void MainWindow::on_pushButton_delete_clicked()
 void MainWindow::on_listWidget_doubleClicked(const QModelIndex &index)
 {
     QListWidgetItem* currentItem = ui->listWidget->takeItem( index.row());
+    QFont lFont = font();
+    lFont.setBold(false);
+    ui->listWidget->item(0)->setFont(lFont);
     if ( NULL != currentItem )
     {
         ui->listWidget->insertItem(0,currentItem);
     }
+    lFont.setBold(true);
+    ui->listWidget->item(0)->setFont(lFont);
+
 }
 
 void MainWindow::on_pushButton_2_clicked()
@@ -295,6 +322,13 @@ void MainWindow::on_pushButton_2_clicked()
 void MainWindow::update_data()
 {
     if(ui->checkBox->checkState()==0)return;
+
+    for(int i= 0;i<ui->listWidget->count();++i){
+        corrdata->add_signal(ui->listWidget->item(i)->text().toStdString().c_str());
+    }
+    for(int i= 0;i<ui->listWidget_2->count();++i){
+        corrdata->add_signal_d(ui->listWidget_2->item(i)->text().toStdString().c_str());
+    }
 
     ui->dateTimeEdit->setDateTime(QDateTime::currentDateTime());
     int cnt = corrdata->add_tag(ui->dateTimeEdit->dateTime().toString("yyyy/MM/dd HH:mm:ss").toStdString());
@@ -343,10 +377,17 @@ void MainWindow::update_data()
 void MainWindow::on_listWidget_2_doubleClicked(const QModelIndex &index)
 {
     QListWidgetItem* currentItem = ui->listWidget_2->takeItem( index.row());
+    QFont lFont = font();
+    lFont.setBold(false);
+    ui->listWidget_2->item(0)->setFont(lFont);
+
     if ( NULL != currentItem )
     {
         ui->listWidget_2->insertItem(0,currentItem);
     }
+    lFont.setBold(true);
+    ui->listWidget_2->item(0)->setFont(lFont);
+
 }
 
 void MainWindow::on_checkBox_calc_stateChanged(int arg1)

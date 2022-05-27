@@ -59,7 +59,7 @@ public:
     string sig_d_name(int n){return sig_d[n].name;};
     double value(string signame,int n){
         if(dflg != 0 && signame==sig[0].name){
-            return data[n].value[signame]/(data[n].denominator[sig_d[0].name]*1e-9/(1.60219e-19))*100;
+            return data[n].value[signame]/data[n].denominator[sig_d[0].name]*100;
         }else{
             return data[n].value[signame];
         }
