@@ -138,7 +138,7 @@ void Corr_data::db_get_sync_data()
                         for(int m=0;m<tData->num_data;m++){
                             if(fdata[m].evno == data[n].sacla_tag||
                                     fdata[m].evno == data[n].sr_tag){
-                                if(fdata[m].fdata>1e8){
+                                if(fdata[m].fdata>1e8|| sig[i].name.find("sr_safety")!=std::string::npos){
                                     data[n].value[sig[i].name] = fdata[m].fdata*1.60219e-10;
                                 }else{
                                     data[n].value[sig[i].name] = fdata[m].fdata;
@@ -176,7 +176,7 @@ void Corr_data::db_get_sync_data()
                         for(int m=0;m<tData->num_data;m++){
                             if(fdata[m].evno == data[n].sacla_tag||
                                     fdata[m].evno == data[n].sr_tag){
-                                if(fdata[m].fdata>1e8){
+                                if(fdata[m].fdata>1e8 || sig_d[i].name.find("sr_safety")!=std::string::npos){
                                     data[n].denominator[sig_d[i].name] = fdata[m].fdata*1.60219e-10;
                                 }else{
                                     data[n].denominator[sig_d[i].name] = fdata[m].fdata;
@@ -421,19 +421,54 @@ int Corr_data::add_tag(string strtime)
     char out[256];
     uint64_t btime;
     int org_size;
-
+    struct tm beg,end,buf;
     sort(data.begin(),data.end());
+    static int cnt = 1;
+    endtime = data.front().beg_time;
+    begtime = data.back().end_time;
+    cerr<<begtime.c_str()<<"  "<<endtime.c_str()<<endl;
 
-    org_size = size;
-    if(strtime<data.front().beg_time){
-        endtime = data.front().beg_time;
+    strptime(strtime.c_str(),"%Y/%m/%d %H:%M:%S",&buf);
+    strptime(endtime.c_str(),"%Y/%m/%d %H:%M:%S",&end);
+    strptime(begtime.c_str(),"%Y/%m/%d %H:%M:%S",&beg);
+    cerr<<begtime.c_str()<<"  "<<endtime.c_str()<<"  "<<strtime.c_str()<<endl;
+    cerr<<mktime(&beg)<<"   "<<mktime(&end)<<"   "<<mktime(&buf)<<endl;
+
+    if(mktime(&buf)<mktime(&end)){
+        cerr<<begtime.c_str()<<"  "<<endtime.c_str()<<endl;
         begtime = strtime;
-    }else if(strtime>data.back().end_time){
+        if(mktime(&end)-mktime(&buf)>600){
+            time_t buf_t = mktime(&end)-600*cnt;
+            char bufstr[256];
+            strftime(bufstr,sizeof (bufstr),"%Y/%m/%d %H:%M:%S",localtime(&buf_t));
+            begtime=bufstr;
+        }
+        cerr<<begtime.c_str()<<"  "<<endtime.c_str()<<endl;
+    }else if(mktime(&buf)>mktime(&beg)){
+        cerr<<begtime.c_str()<<"  "<<endtime.c_str()<<endl;
         endtime = strtime;
-        begtime = data.back().end_time;
+        if(mktime(&buf)-mktime(&beg)>600){
+            time_t buf_t = mktime(&beg)+600*cnt;
+            char bufstr[256];
+            strftime(bufstr,sizeof (bufstr),"%Y/%m/%d %H:%M:%S",localtime(&buf_t));
+            endtime=bufstr;
+        }
     }else{
         return 0;
     }
+
+cerr<<begtime.c_str()<<"  "<<endtime.c_str()<<endl;
+
+    org_size = size;
+//    if(strtime<data.front().beg_time){
+//        endtime = data.front().beg_time;
+//        begtime = strtime;
+//    }else if(strtime>data.back().end_time){
+//        endtime = strtime;
+//        begtime = data.back().end_time;
+//    }else{
+//        return 0;
+//    }
 
 
     status = db_get_data_f(sep5u.c_str(),begtime.c_str(),endtime.c_str(),&get_inf_sep5u,&get_inf_cnt_sep5u);
@@ -480,6 +515,12 @@ int Corr_data::add_tag(string strtime)
         free(get_inf_sep5u);
     }
     sort(data.begin(),data.end());
+    if(get_inf_cnt_sep5u==0){
+        cerr<<get_inf_cnt_sep5u<<endl;
+        cnt++;
+    }else{
+        cnt = 0;
+    }
     return get_inf_cnt_sep5u;
 }
 
@@ -515,7 +556,7 @@ void Corr_data::add_db_get_sync_data()
                             for(int m=0;m<tData->num_data;m++){
                                 if(fdata[m].evno == data[n].sacla_tag||
                                         fdata[m].evno == data[n].sr_tag){
-                                    if(fdata[m].fdata>1e8){
+                                    if(fdata[m].fdata>1e8||sig[i].name.find("sr_safety")!=std::string::npos){
                                         data[n].value[sig[i].name] = fdata[m].fdata*1.60219e-10;
                                     }else{
                                         data[n].value[sig[i].name] = fdata[m].fdata;
@@ -556,7 +597,7 @@ void Corr_data::add_db_get_sync_data()
                             for(int m=0;m<tData->num_data;m++){
                                 if(fdata[m].evno == data[n].sacla_tag||
                                         fdata[m].evno == data[n].sr_tag){
-                                    if(fdata[m].fdata>1e8){
+                                    if(fdata[m].fdata>1e8||sig_d[i].name.find("sr_safety")!=std::string::npos){
                                         data[n].denominator[sig_d[i].name] = fdata[m].fdata*1.60219e-10;
                                     }else{
                                         data[n].denominator[sig_d[i].name] = fdata[m].fdata;
