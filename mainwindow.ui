@@ -221,11 +221,38 @@
              <number>8</number>
             </property>
             <item>
-             <widget class="QCheckBox" name="checkBox">
-              <property name="text">
-               <string>Auto reload</string>
+             <layout class="QHBoxLayout" name="horizontalLayout_9">
+              <property name="topMargin">
+               <number>0</number>
               </property>
-             </widget>
+              <item>
+               <widget class="QCheckBox" name="checkBox">
+                <property name="text">
+                 <string>Auto reload</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="pushButton_3">
+                <property name="text">
+                 <string>Plot</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <spacer name="horizontalSpacer_5">
+                <property name="orientation">
+                 <enum>Qt::Horizontal</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>40</width>
+                  <height>20</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+             </layout>
             </item>
             <item>
              <layout class="QHBoxLayout" name="horizontalLayout_8">

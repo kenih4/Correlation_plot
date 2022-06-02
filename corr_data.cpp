@@ -277,7 +277,57 @@ void Corr_data::calc_mic(double th)
         delete [] y;
     }
 }
+void Corr_data::calc_mic(int beg,int end)
+{
+    MINE *mine;
+    double *x,*y;
+    int n = 0,m = 0;
+    double alpha=0.85;
+    struct tm buf;
+    for(int i=0;i<(int)size;i++){
+        strptime(endtime(i).c_str(),"%Y/%m/%d %H:%M:%S",&buf);
+        if(beg < mktime(&buf) && mktime(&buf) < end){
+            n++;
+        }
+    }
+    for(int i=0;i<(int)sig.size();i++){
+        x = new double [n];
+        y = new double [n];
+        if(m>=2500){
+            alpha = 0.55;
+        }else if(n>=1000){
+            alpha = 0.6;
+        }else if(n>=500){
+            alpha = 0.65;
+        }else if(n>=250){
+            alpha = 0.7;
+        }else if(n>=50){
+            alpha = 0.75;
+        }else if(n>=25){
+            alpha = 0.8;
+        }else{
+            alpha = 0.85;
+        }
+        mine = new MINE(alpha, 15, EST_MIC_APPROX);
 
+        m = 0;
+        for(int j=0;j<(int)size;j++){
+            strptime(endtime(j).c_str(),"%Y/%m/%d %H:%M:%S",&buf);
+            if(beg < mktime(&buf) && mktime(&buf) < end){
+                x[m] = value(sig[0].name,j);
+                y[m] = value(sig[i].name,j);
+                m++;
+            }
+        }
+
+
+        mine->compute_score(x,y,n);
+        sig[i].coefficient = mine->mic();
+        delete mine;
+        delete [] x;
+        delete [] y;
+    }
+}
 double Corr_data::get_max(int n)
 {
 

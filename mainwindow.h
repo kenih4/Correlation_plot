@@ -26,6 +26,7 @@ private slots:
     void on_pushButton_2_clicked();
     void update_data();
     void plot_data(QCustomPlot *plot,int n);
+    void plot_data(QCustomPlot *plot,int n,int,int);
     void plot_init(QCustomPlot *plot);
     void plot_trend(QCustomPlot *plot);
     void on_listWidget_2_doubleClicked(const QModelIndex &index);
@@ -33,6 +34,11 @@ private slots:
     void on_checkBox_calc_stateChanged(int arg1);
     bool save();
     bool saveAs();
+
+    void mousePress();
+    void trendMouseMoved(QMouseEvent *event);
+
+    void on_pushButton_3_clicked();
 
 private:
     Ui::MainWindow *ui;
@@ -43,6 +49,8 @@ private:
     void setCurrentFile(const QString &fileName);
     void createStatusBar();
     QString curFile;
+    QCPItemTracer *tracer;
+    QCPItemText *tracerText;
 
 };
 #endif // MAINWINDOW_H

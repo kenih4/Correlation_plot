@@ -71,6 +71,7 @@ public:
     int64_t sr_tag(int n){return data[n].sr_tag;};
     void calc_mic();
     void calc_mic(double th);
+    void calc_mic(int beg,int end);
     double mic(int n){return sig[n].coefficient;};
     double get_max(int n);
     double get_min(int n);

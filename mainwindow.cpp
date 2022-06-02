@@ -24,7 +24,6 @@ MainWindow::MainWindow(QWidget *parent)
     plot_init(ui->widget_9);
     plot_init(ui->widget);
 
-    //    ui->listWidget->addItem("sr_safety_topup_intlk_beam/efficiency");
     ui->listWidget->addItem("sr_safety_topup_intlk_beam_sr_dcct1/charge_diff");
     ui->listWidget->addItem("xfel_mon_bpm_xsbt_3_x/position");
     ui->listWidget->addItem("xfel_mon_bpm_xsbt_5_x/position");
@@ -52,13 +51,70 @@ MainWindow::MainWindow(QWidget *parent)
     createStatusBar();
     ui->radioButton->setChecked(true);
 
+
+    connect(ui->widget,SIGNAL(mousePress(QMouseEvent*)),this,SLOT(mousePress()));
+    ui->widget->addGraph();
+    ui->widget->graph(3)->setLineStyle(QCPGraph::lsLine);
+    ui->widget->graph(3)->setVisible(false);
+    ui->widget->addGraph();
+    ui->widget->graph(4)->setLineStyle(QCPGraph::lsLine);
+    ui->widget->graph(4)->setVisible(false);
+
+    tracer = new QCPItemTracer(ui->widget);
+    tracer->setGraph(ui->widget->graph(0));
+    tracer->setGraphKey(0.0);
+    tracer->setStyle(QCPItemTracer::tsCircle);
+    tracer->setPen(QPen(Qt::red));
+    tracer->setBrush(Qt::red);
+    tracer->setSize(7);
+    connect(ui->widget,SIGNAL(mouseMove(QMouseEvent*)),this,SLOT(trendMouseMoved(QMouseEvent*)));
+    tracerText = new QCPItemText(ui->widget);
+    tracerText->position->setType(QCPItemPosition::ptAxisRectRatio);
+    tracerText->setFont(QFont(font().family(),12));
+    tracerText->setPositionAlignment(Qt::AlignLeft);
+    tracerText->position->setCoords(QPointF(0,0));
+    tracerText->setText("(-)");
+
 }
 
 MainWindow::~MainWindow()
 {
     delete ui;
 }
-
+void MainWindow::trendMouseMoved(QMouseEvent *event){
+    QPoint pos = event->pos();
+    double key = floor(ui->widget->graph(0)->keyAxis()->pixelToCoord(pos.x()));
+    tracer->setGraphKey(key);
+    double x,y;
+    x = qBound(0.,tracer->position->key()/ui->widget->graph(0)->keyAxis()->range().size(),0.75);
+    y = qBound(0.,1.- tracer->position->value()/ui->widget->graph(0)->valueAxis()->range().size(),0.9);
+    tracerText->position->setCoords(x,y);
+    tracerText->setText("("+QString::number((tracer->position->value()))+")");
+    ui->widget->replot();
+}
+void MainWindow::mousePress()
+{
+    QVector<double> x(2),y(2);
+    x[0] = tracer->position->key();
+    x[1] = tracer->position->key();
+    y[0] = 1e9;
+    y[1] = -1e9;
+    if(ui->widget->graph(3)->data()->begin()->key==0){
+        ui->widget->graph(3)->setData(x,y);
+        ui->widget->graph(3)->setVisible(true);
+    }else if(ui->widget->graph(4)->data()->begin()->key==0){
+        ui->widget->graph(4)->setData(x,y);
+        ui->widget->graph(4)->setVisible(true);
+    }else if(abs(ui->widget->graph(3)->data()->begin()->key-x[0])<
+             abs(ui->widget->graph(4)->data()->begin()->key-x[0])){
+        ui->widget->graph(3)->setData(x,y);
+        ui->widget->graph(3)->setVisible(true);
+    }else{
+        ui->widget->graph(4)->setData(x,y);
+        ui->widget->graph(4)->setVisible(true);
+    }
+    ui->widget->replot();
+}
 
 void MainWindow::on_pushButton_clicked()
 {
@@ -169,7 +225,12 @@ void MainWindow::plot_trend(QCustomPlot *plot)
     plot->axisRect()->insetLayout()->setInsetAlignment(0,Qt::AlignTop|Qt::AlignRight);
     plot->setInteractions(QCP::iRangeDrag|QCP::iRangeZoom);
     //    cerr<<"****  "<<corrdata->sig_name(n)<<"  4****"<<endl;
-
+    QVector<double> x4(2),y4(2);
+    x4[0] = x4[1] = y4[0] = y4[1] = 0;
+    ui->widget->graph(3)->setData(x4,y4);
+    ui->widget->graph(4)->setData(x4,y4);
+    ui->widget->graph(3)->setVisible(false);
+    ui->widget->graph(4)->setVisible(false);
     plot->replot();
 }
 void MainWindow::plot_data(QCustomPlot *plot,int n)
@@ -178,13 +239,10 @@ void MainWindow::plot_data(QCustomPlot *plot,int n)
     QFont legendFont = font();
     legendFont.setPointSize(9);
 
-    //    cerr<<"****  "<<corrdata->sig_name(n)<<"  1****"<<endl;
     for(int i=0;i<corrdata->data_size();i++){
         x[i] = corrdata->value(corrdata->sig_name(n),i);
         y[i] = corrdata->value(corrdata->sig_name(0),i);
-        //        y[i] = corrdata->value(corrdata->sig_name(0),i)/(corrdata->denominator(corrdata->sig_d_name(0),i)*1e-9/(1.60219e-19))*100;
     }
-    //    cerr<<"****  "<<corrdata->sig_name(n)<<"  2****"<<endl;
     plot->graph(0)->setData(x,y);
 
     QVector<double> x2(1),y2(1);
@@ -196,8 +254,6 @@ void MainWindow::plot_data(QCustomPlot *plot,int n)
     x3[0] = x[corrdata->data_size()-1];
     y3[0] = y[corrdata->data_size()-1];
     plot->graph(2)->setData(x3,y3);
-    //    cerr<<"****  "<<corrdata->sig_name(n)<<"  2****"<<endl;
-
 
     if(ui->checkBox_th->checkState()==Qt::Checked){
         plot->xAxis->setRange(corrdata->get_min(n,0.5,0,ui->V_threshold->text().toDouble()),corrdata->get_max(n,0.5,0,ui->V_threshold->text().toDouble()));
@@ -205,10 +261,8 @@ void MainWindow::plot_data(QCustomPlot *plot,int n)
     }else{
         plot->xAxis->setRange(corrdata->get_min(n,0.5),corrdata->get_max(n,0.5));
         plot->yAxis->setRange(corrdata->get_min(0,0.5),corrdata->get_max(0,0.5));
-
     }
 
-    //    cerr<<"****  "<<corrdata->sig_name(n)<<"  3****"<<endl;
     plot->xAxis->setLabel(tr(corrdata->sig_name(n).c_str()));
     plot->yAxis->setLabel(tr(corrdata->sig_name(0).c_str()));
     if(ui->checkBox_calc->checkState()==Qt::Checked){
@@ -216,7 +270,7 @@ void MainWindow::plot_data(QCustomPlot *plot,int n)
     }
     plot->axisRect()->insetLayout()->setInsetAlignment(0,Qt::AlignTop|Qt::AlignRight);
     plot->setInteractions(QCP::iRangeDrag|QCP::iRangeZoom);
-    //    cerr<<"****  "<<corrdata->sig_name(n)<<"  4****"<<endl;
+
     QCPItemText *micValue = new QCPItemText(plot);
     micValue->setPositionAlignment(Qt::AlignTop|Qt::AlignHCenter);
     micValue->position->setType(QCPItemPosition::ptAxisRectRatio);
@@ -225,6 +279,8 @@ void MainWindow::plot_data(QCustomPlot *plot,int n)
     micValue->setFont(legendFont);
     micValue->setPen(QPen(Qt::white));
     micValue->setBrush(QBrush(QColor(255,255,255,230)));
+    plot->graph(1)->setVisible(true);
+    plot->graph(2)->setVisible(true);
 
     plot->replot();
 
@@ -454,4 +510,89 @@ void MainWindow::setCurrentFile(const QString &fileName)
     if (curFile.isEmpty())
         shownName = "untitled.txt";
     setWindowFilePath(shownName);
+}
+
+void MainWindow::on_pushButton_3_clicked()
+{
+    int beg,end;
+    if(ui->widget->graph(3)->data()->begin()->key < ui->widget->graph(4)->data()->begin()->key){
+        beg = ui->widget->graph(3)->data()->begin()->key;
+        end = ui->widget->graph(4)->data()->begin()->key;
+    }else{
+        beg = ui->widget->graph(3)->data()->begin()->key;
+        end = ui->widget->graph(4)->data()->begin()->key;
+    }
+    cerr<<beg<<"   "<<end<<endl;
+    corrdata->calc_mic(beg,end);
+    cerr<<beg<<"   "<<end<<endl;
+
+    plot_data(ui->widget_1,corrdata->get_ranking(1),beg,end);
+    plot_data(ui->widget_2,corrdata->get_ranking(2),beg,end);
+    plot_data(ui->widget_3,corrdata->get_ranking(3),beg,end);
+    plot_data(ui->widget_7,corrdata->get_ranking(4),beg,end);
+    plot_data(ui->widget_8,corrdata->get_ranking(5),beg,end);
+    plot_data(ui->widget_9,corrdata->get_ranking(6),beg,end);
+    cerr<<beg<<"   "<<end<<endl;
+
+    ui->widget->xAxis->setRange(beg,end);
+    ui->widget->replot();
+
+}
+
+
+void MainWindow::plot_data(QCustomPlot *plot,int n,int beg,int end)
+{
+    QFont legendFont = font();
+    legendFont.setPointSize(9);
+    int m=0;
+    struct tm buf;
+
+    for(int i=0;i<corrdata->data_size();i++){
+        strptime(corrdata->endtime(i).c_str(),"%Y/%m/%d %H:%M:%S",&buf);
+        if(beg < mktime(&buf) && mktime(&buf) < end){
+            m++;
+        }
+    }
+    cerr<<"m = "<<m<<endl;
+    QVector<double> x(m),y(m);
+    m=0;
+    for(int i=0;i<corrdata->data_size();i++){
+        strptime(corrdata->endtime(i).c_str(),"%Y/%m/%d %H:%M:%S",&buf);
+        if(beg < mktime(&buf) && mktime(&buf) < end){
+            x[m] = corrdata->value(corrdata->sig_name(n),i);
+            y[m] = corrdata->value(corrdata->sig_name(0),i);
+            m++;
+        }
+    }
+    plot->graph(0)->setData(x,y);
+
+    if(ui->checkBox_th->checkState()==Qt::Checked){
+        plot->xAxis->setRange(corrdata->get_min(n,0.5,0,ui->V_threshold->text().toDouble()),corrdata->get_max(n,0.5,0,ui->V_threshold->text().toDouble()));
+        plot->yAxis->setRange(corrdata->get_min(0,0.5,0,ui->V_threshold->text().toDouble()),corrdata->get_max(0,0.5,0,ui->V_threshold->text().toDouble()));
+    }else{
+        plot->xAxis->setRange(corrdata->get_min(n,0.5),corrdata->get_max(n,0.5));
+        plot->yAxis->setRange(corrdata->get_min(0,0.5),corrdata->get_max(0,0.5));
+    }
+
+    plot->xAxis->setLabel(tr(corrdata->sig_name(n).c_str()));
+    plot->yAxis->setLabel(tr(corrdata->sig_name(0).c_str()));
+    if(ui->checkBox_calc->checkState()==Qt::Checked){
+        plot->yAxis->setLabel("calc efficiency");
+    }
+    plot->axisRect()->insetLayout()->setInsetAlignment(0,Qt::AlignTop|Qt::AlignRight);
+    plot->setInteractions(QCP::iRangeDrag|QCP::iRangeZoom);
+
+    QCPItemText *micValue = new QCPItemText(plot);
+    micValue->setPositionAlignment(Qt::AlignTop|Qt::AlignHCenter);
+    micValue->position->setType(QCPItemPosition::ptAxisRectRatio);
+    micValue->position->setCoords(0.8, 0); // place position at center/top of axis rect
+    micValue->setText(QString("mic : %1").arg(corrdata->mic(n),0,'f',3));
+    micValue->setFont(legendFont);
+    micValue->setPen(QPen(Qt::white));
+    micValue->setBrush(QBrush(QColor(255,255,255,230)));
+    plot->graph(1)->setVisible(false);
+    plot->graph(2)->setVisible(false);
+
+    plot->replot();
+
 }
