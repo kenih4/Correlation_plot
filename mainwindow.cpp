@@ -70,10 +70,13 @@ MainWindow::MainWindow(QWidget *parent)
     connect(ui->widget,SIGNAL(mouseMove(QMouseEvent*)),this,SLOT(trendMouseMoved(QMouseEvent*)));
     tracerText = new QCPItemText(ui->widget);
     tracerText->position->setType(QCPItemPosition::ptAxisRectRatio);
-    tracerText->setFont(QFont(font().family(),12));
+    tracerText->setFont(QFont(font().family(),8));
     tracerText->setPositionAlignment(Qt::AlignLeft);
     tracerText->position->setCoords(QPointF(0,0));
     tracerText->setText("(-)");
+    tracer->setVisible(false);
+    tracerText->setVisible(false);
+
 
 }
 
@@ -86,10 +89,12 @@ void MainWindow::trendMouseMoved(QMouseEvent *event){
     double key = floor(ui->widget->graph(0)->keyAxis()->pixelToCoord(pos.x()));
     tracer->setGraphKey(key);
     double x,y;
-    x = qBound(0.,tracer->position->key()/ui->widget->graph(0)->keyAxis()->range().size(),0.75);
-    y = qBound(0.,1.- tracer->position->value()/ui->widget->graph(0)->valueAxis()->range().size(),0.9);
+    x = qBound(0.,(tracer->position->key()-ui->widget->graph(0)->keyAxis()->range().lower)/ui->widget->graph(0)->keyAxis()->range().size(),0.94);
+    y = qBound(0.,1.- (tracer->position->value()-ui->widget->graph(0)->valueAxis()->range().lower)/ui->widget->graph(0)->valueAxis()->range().size(),0.9);
     tracerText->position->setCoords(x,y);
     tracerText->setText("("+QString::number((tracer->position->value()))+")");
+    tracer->setVisible(true);
+    tracerText->setVisible(true);
     ui->widget->replot();
 }
 void MainWindow::mousePress()
@@ -231,6 +236,9 @@ void MainWindow::plot_trend(QCustomPlot *plot)
     ui->widget->graph(4)->setData(x4,y4);
     ui->widget->graph(3)->setVisible(false);
     ui->widget->graph(4)->setVisible(false);
+    tracer->setVisible(false);
+    tracerText->setVisible(false);
+
     plot->replot();
 }
 void MainWindow::plot_data(QCustomPlot *plot,int n)
