@@ -156,7 +156,10 @@ class QCPPolarGraph;
   
   It provides QMetaObject-based reflection of its enums and flags via \a QCP::staticMetaObject.
 */
-#ifndef Q_MOC_RUN
+#if QT_VERSION >= QT_VERSION_CHECK(5, 8, 0)
+namespace QCP {
+Q_NAMESPACE
+#elif !defined(Q_MOC_RUN)
 namespace QCP {
 #else
 class QCP { // when in moc-run, make it look like a class, so we get Q_GADGET, Q_ENUMS/Q_FLAGS features in namespace
@@ -379,7 +382,23 @@ inline int getMarginValue(const QMargins &margins, QCP::MarginSide side)
 }
 
 
+#if QT_VERSION >= QT_VERSION_CHECK(5, 8, 0)
+Q_ENUM_NS(ExportPen)
+Q_ENUM_NS(ResolutionUnit)
+Q_ENUM_NS(SignDomain)
+Q_ENUM_NS(MarginSide)
+Q_FLAG_NS(MarginSides)
+Q_ENUM_NS(AntialiasedElement)
+Q_FLAG_NS(AntialiasedElements)
+Q_ENUM_NS(PlottingHint)
+Q_FLAG_NS(PlottingHints)
+Q_ENUM_NS(Interaction)
+Q_FLAG_NS(Interactions)
+Q_ENUM_NS(SelectionRectMode)
+Q_ENUM_NS(SelectionType)
+#else
 extern const QMetaObject staticMetaObject; // in moc-run we create a static meta object for QCP "fake" object. This line is the link to it via QCP::staticMetaObject in normal operation as namespace
+#endif
 
 } // end of namespace QCP
 Q_DECLARE_OPERATORS_FOR_FLAGS(QCP::AntialiasedElements)
