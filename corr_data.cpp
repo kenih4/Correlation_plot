@@ -243,9 +243,13 @@ void Corr_data::calc_mic(double th)
         }
     }
     for(int i=0;i<(int)sig.size();i++){
+        if(n<2){
+            sig[i].coefficient = 0;
+            continue;
+        }
         x = new double [n];
         y = new double [n];
-        if(m>=2500){
+        if(n>=2500){
             alpha = 0.55;
         }else if(n>=1000){
             alpha = 0.6;
