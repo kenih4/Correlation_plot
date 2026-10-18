@@ -698,7 +698,7 @@ void Corr_data::outfile(string fname)
         for(int j=0;j<(int)sig_d.size();j++){
             out << sig_d[j].name.c_str()<<",";
         }
-        out << endl;
+        out << Qt::endl;
         for(int i=0;i<size;i++){
             out << data[i].sacla_tag<<",";
             out << data[i].sr_tag<<",";
@@ -713,11 +713,11 @@ void Corr_data::outfile(string fname)
             for(int j=0;j<(int)sig_d.size();j++){
                 out << data[i].denominator[sig_d[j].name]<<",";
             }
-            out << endl;
+            out << Qt::endl;
         }
         fp.close();
     }else{
-        qWarning().noquote()<<"Cannot open file  "<<fname.c_str()<<endl;
+        qWarning().noquote()<<"Cannot open file  "<<fname.c_str()<<Qt::endl;
     }
 
 }
