@@ -480,37 +480,56 @@ int Corr_data::add_tag(string strtime)
     int status;
     char out[256];
     uint64_t btime;
-    struct tm beg,end,buf;
     sort(data.begin(),data.end());
     static int cnt = 1;
-    endtime = data.front().beg_time;
-    begtime = data.back().end_time;
-    cerr<<begtime.c_str()<<"  "<<endtime.c_str()<<endl;
 
-    strptime(strtime.c_str(),"%Y/%m/%d %H:%M:%S",&buf);
-    strptime(endtime.c_str(),"%Y/%m/%d %H:%M:%S",&end);
-    strptime(begtime.c_str(),"%Y/%m/%d %H:%M:%S",&beg);
-    cerr<<begtime.c_str()<<"  "<<endtime.c_str()<<"  "<<strtime.c_str()<<endl;
-    cerr<<mktime(&beg)<<"   "<<mktime(&end)<<"   "<<mktime(&buf)<<endl;
+    // 基準になる時刻は、beg_time/end_time が入っている(有効な)エントリだけから取る。
+    // get_tag で埋まらなかった空のエントリ(sacla_tag=0)は sort で先頭に来るため、除外しないと時刻が不定になる。
+    string first_beg,last_end;
+    for(size_t k=0;k<data.size();k++){
+        if(!data[k].beg_time.empty()){first_beg = data[k].beg_time;break;}
+    }
+    for(size_t k=data.size();k>0;k--){
+        if(!data[k-1].end_time.empty()){last_end = data[k-1].end_time;break;}
+    }
+    cerr<<last_end.c_str()<<"  "<<first_beg.c_str()<<"  "<<strtime.c_str()<<endl;
 
-    if(mktime(&buf)<mktime(&end)){
-        cerr<<begtime.c_str()<<"  "<<endtime.c_str()<<endl;
+    auto parse_time = [](const string &s,time_t &t)->bool{
+        struct tm tmv;
+        memset(&tmv,0,sizeof(tmv));
+        tmv.tm_isdst = -1;
+        if(strptime(s.c_str(),"%Y/%m/%d %H:%M:%S",&tmv)==NULL)return false;
+        t = mktime(&tmv);
+        return true;
+    };
+    auto format_time = [](time_t t)->string{
+        char bufstr[256];
+        strftime(bufstr,sizeof (bufstr),"%Y/%m/%d %H:%M:%S",localtime(&t));
+        return string(bufstr);
+    };
+
+    time_t t_buf = 0,t_end = 0,t_beg = 0;
+    if(!parse_time(strtime,t_buf))return 0;
+    bool have_ref = !first_beg.empty() && !last_end.empty()
+            && parse_time(first_beg,t_end) && parse_time(last_end,t_beg);
+    cerr<<t_beg<<"   "<<t_end<<"   "<<t_buf<<endl;
+
+    if(!have_ref){
+        // 有効なデータが1件もない: 直近600秒を探す
+        begtime = format_time(t_buf-600);
+        endtime = strtime;
+    }else if(t_buf<t_end){
         begtime = strtime;
-        if(mktime(&end)-mktime(&buf)>600){
-            time_t buf_t = mktime(&end)-600*cnt;
-            char bufstr[256];
-            strftime(bufstr,sizeof (bufstr),"%Y/%m/%d %H:%M:%S",localtime(&buf_t));
-            begtime=bufstr;
+        endtime = first_beg;
+        if(t_end-t_buf>600){
+            begtime = format_time(t_end-600*cnt);
         }
         cerr<<begtime.c_str()<<"  "<<endtime.c_str()<<endl;
-    }else if(mktime(&buf)>mktime(&beg)){
-        cerr<<begtime.c_str()<<"  "<<endtime.c_str()<<endl;
+    }else if(t_buf>t_beg){
+        begtime = last_end;
         endtime = strtime;
-        if(mktime(&buf)-mktime(&beg)>600){
-            time_t buf_t = mktime(&beg)+600*cnt;
-            char bufstr[256];
-            strftime(bufstr,sizeof (bufstr),"%Y/%m/%d %H:%M:%S",localtime(&buf_t));
-            endtime=bufstr;
+        if(t_buf-t_beg>600){
+            endtime = format_time(t_beg+600*cnt);
         }
     }else{
         return 0;
