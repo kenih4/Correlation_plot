@@ -72,3 +72,9 @@ Thumbs.db
 *.exe
 
 *.user
+
+# build products
+moc_predefs.h
+Correlation_plot
+Correlation_plot_*
+m.sh
