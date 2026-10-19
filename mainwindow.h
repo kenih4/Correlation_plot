@@ -39,8 +39,11 @@ private slots:
     void trendMouseMoved(QMouseEvent *event);
 
     void on_pushButton_3_clicked();
+    void save_signal_list();
 
 private:
+    QString signal_list_file();
+    bool load_signal_list();
     Ui::MainWindow *ui;
     Corr_data *corrdata;
     QTimer *timer;
