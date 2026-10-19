@@ -480,7 +480,6 @@ int Corr_data::add_tag(string strtime)
     int status;
     char out[256];
     uint64_t btime;
-    int org_size;
     struct tm beg,end,buf;
     sort(data.begin(),data.end());
     static int cnt = 1;
@@ -519,7 +518,6 @@ int Corr_data::add_tag(string strtime)
 
     cerr<<begtime.c_str()<<"  "<<endtime.c_str()<<endl;
 
-    org_size = size;
     //    if(strtime<data.front().beg_time){
     //        endtime = data.front().beg_time;
     //        begtime = strtime;
@@ -532,6 +530,7 @@ int Corr_data::add_tag(string strtime)
 
 
     status = db_get_data_f(sep5u.c_str(),begtime.c_str(),endtime.c_str(),&get_inf_sep5u,&get_inf_cnt_sep5u);
+    int added = 0;  // 実際にdataへ追加できたショット数
     if(status==0 && get_inf_cnt_sep5u>0){
         for(int i=0;i<get_inf_cnt_sep5u;i++){
             cerr<<(get_inf_sep5u+i)->evno << "  " << (get_inf_sep5u+i)->tdata<<endl;
@@ -539,19 +538,21 @@ int Corr_data::add_tag(string strtime)
             status = db_get_data_num_i(route.c_str(),out,60,&get_inf_route,&get_inf_cnt_route);
             if(status==0 && get_inf_cnt_route>0){
                 append();
+                // 除外されたショットがあっても位置がずれないよう、常に末尾に書き込む
+                Data &d = data.back();
                 for(int j=0;j<get_inf_cnt_route;j++){
                     if((get_inf_route+j)->idata==769){
-                        data[i+org_size].sacla_tag=(get_inf_route+j)->evno;
+                        d.sacla_tag=(get_inf_route+j)->evno;
                         db_unixtime_us_to_date((get_inf_route+get_inf_cnt_route-1)->unixtime_us,out);
-                        data[i+org_size].beg_time = out;
+                        d.beg_time = out;
                         db_unixtime_us_add_sec(get_inf_route->unixtime_us,2.0,&btime);
                         db_unixtime_us_to_date(btime,out);
-                        data[i+org_size].end_time = out;
-                        status = db_get_data_f(ssbt.c_str(),data[i+org_size].beg_time.c_str(),data[i+org_size].end_time.c_str(),&get_inf_ssbt,&get_inf_cnt_ssbt);
+                        d.end_time = out;
+                        status = db_get_data_f(ssbt.c_str(),d.beg_time.c_str(),d.end_time.c_str(),&get_inf_ssbt,&get_inf_cnt_ssbt);
                         if(status == 0 && get_inf_cnt_ssbt>0){
                             for(int n=0;n<get_inf_cnt_ssbt;n++){
                                 if((get_inf_ssbt+n)->fdata > 0.0){
-                                    data[i+org_size].sr_tag = (get_inf_ssbt+n)->evno;
+                                    d.sr_tag = (get_inf_ssbt+n)->evno;
                                     break;
                                 }
                             }
@@ -560,14 +561,15 @@ int Corr_data::add_tag(string strtime)
                         break;
                     }
                 }
-                cerr<<"beg = "<<data[i+org_size].beg_time<<
-                      "  end = "<<data[i+org_size].end_time<<
-                      "  sacla = "<<data[i+org_size].sacla_tag<<
-                      "  sr = "<<data[i+org_size].sr_tag<<endl;
-                if(data[i+org_size].sr_tag==0){
-                    data.erase(data.end()-1);
+                cerr<<"beg = "<<d.beg_time<<
+                      "  end = "<<d.end_time<<
+                      "  sacla = "<<d.sacla_tag<<
+                      "  sr = "<<d.sr_tag<<endl;
+                if(d.sr_tag==0){
+                    data.pop_back();
                     size-=1;
-                    get_inf_cnt_sep5u-=1;
+                }else{
+                    added++;
                 }
                 free(get_inf_route);
             }
@@ -575,13 +577,13 @@ int Corr_data::add_tag(string strtime)
         free(get_inf_sep5u);
     }
     sort(data.begin(),data.end());
-    if(get_inf_cnt_sep5u==0){
-        cerr<<get_inf_cnt_sep5u<<endl;
+    if(added==0){
+        cerr<<added<<endl;
         cnt++;
     }else{
         cnt = 0;
     }
-    return get_inf_cnt_sep5u;
+    return added;
 }
 
 void Corr_data::add_db_get_sync_data()
