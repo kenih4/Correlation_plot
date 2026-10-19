@@ -30,7 +30,7 @@ MainWindow::MainWindow(QWidget *parent)
     plot_init(ui->widget_9);
     plot_init(ui->widget);
 
-    if(!load_signal_list()){
+    if(!load_signal_list(ui->listWidget,"signals.txt")){
         ui->listWidget->addItem("sr_safety_topup_intlk_beam_sr_dcct1/charge_diff");
         ui->listWidget->addItem("xfel_mon_bpm_xsbt_3_x/position");
         ui->listWidget->addItem("xfel_mon_bpm_xsbt_5_x/position");
@@ -40,12 +40,13 @@ MainWindow::MainWindow(QWidget *parent)
         ui->listWidget->addItem("xfel_mon_msbpm_bc2_x/position");
         ui->listWidget->addItem("xfel_mon_msbpm_bc3_x/position");
     }
-    // listWidget が変更されたら信号リストファイルに保存する
-    connect(ui->listWidget->model(), SIGNAL(rowsInserted(QModelIndex,int,int)), this, SLOT(save_signal_list()));
-    connect(ui->listWidget->model(), SIGNAL(rowsRemoved(QModelIndex,int,int)), this, SLOT(save_signal_list()));
-
-    ui->listWidget_2->addItem("sr_mon_bpm_xsbt_20_sum/charge");
-    ui->listWidget_2->addItem("sr_mon_bpm_xsbt_21_sum/charge");
+    if(!load_signal_list(ui->listWidget_2,"signals_denominator.txt")){
+        ui->listWidget_2->addItem("sr_mon_bpm_xsbt_20_sum/charge");
+        ui->listWidget_2->addItem("sr_mon_bpm_xsbt_21_sum/charge");
+    }
+    // listWidget, listWidget_2 が変更されたら信号リストファイルに保存する
+    connect_save_signal_list(ui->listWidget,"signals.txt");
+    connect_save_signal_list(ui->listWidget_2,"signals_denominator.txt");
     QFont lFont = font();
     lFont.setBold(true);
     ui->listWidget->item(0)->setFont(lFont);
@@ -91,16 +92,16 @@ MainWindow::MainWindow(QWidget *parent)
 
 }
 
-QString MainWindow::signal_list_file()
+QString MainWindow::signal_list_file(const QString &name)
 {
-    return QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation) + "/signals.txt";
+    return QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation) + "/" + name;
 }
 
-// 1行1信号のテキストファイルから listWidget を読み込む。
+// 1行1信号のテキストファイルから list を読み込む。
 // ファイルが無い/空の場合は false を返す(呼び出し側で既定リストを使う)
-bool MainWindow::load_signal_list()
+bool MainWindow::load_signal_list(QListWidget *list, const QString &name)
 {
-    QFile fp(signal_list_file());
+    QFile fp(signal_list_file(name));
     if(!fp.open(QIODevice::ReadOnly | QIODevice::Text)){
         return false;
     }
@@ -108,16 +109,16 @@ bool MainWindow::load_signal_list()
     while(!in.atEnd()){
         QString line = in.readLine().trimmed();
         if(line.isEmpty() || line.startsWith('#'))continue;
-        ui->listWidget->addItem(line);
+        list->addItem(line);
     }
-    cerr << "Load signal list : " << signal_list_file().toStdString()
-         << "  (" << ui->listWidget->count() << " signals)" << endl;
-    return ui->listWidget->count() > 0;
+    cerr << "Load signal list : " << signal_list_file(name).toStdString()
+         << "  (" << list->count() << " signals)" << endl;
+    return list->count() > 0;
 }
 
-void MainWindow::save_signal_list()
+void MainWindow::save_signal_list(QListWidget *list, const QString &name)
 {
-    QString fname = signal_list_file();
+    QString fname = signal_list_file(name);
     QDir().mkpath(QFileInfo(fname).absolutePath());
     QFile fp(fname);
     if(!fp.open(QIODevice::WriteOnly | QIODevice::Text)){
@@ -125,9 +126,16 @@ void MainWindow::save_signal_list()
         return;
     }
     QTextStream out(&fp);
-    for(int i=0;i<ui->listWidget->count();++i){
-        out << ui->listWidget->item(i)->text() << Qt::endl;
+    for(int i=0;i<list->count();++i){
+        out << list->item(i)->text() << Qt::endl;
     }
+}
+
+void MainWindow::connect_save_signal_list(QListWidget *list, const QString &name)
+{
+    auto save = [this, list, name](){ save_signal_list(list, name); };
+    connect(list->model(), &QAbstractItemModel::rowsInserted, this, save);
+    connect(list->model(), &QAbstractItemModel::rowsRemoved, this, save);
 }
 
 MainWindow::~MainWindow()
