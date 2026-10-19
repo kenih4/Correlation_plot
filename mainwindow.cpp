@@ -258,7 +258,7 @@ void MainWindow::plot_trend(QCustomPlot *plot)
         //        y[i] = corrdata->value(corrdata->sig_name(0),i)/(corrdata->denominator(corrdata->sig_d_name(0),i)*1e-9/(1.60219e-19))*100;
     }
     //    cerr<<"****  "<<corrdata->sig_name(n)<<"  2****"<<endl;
-    plot->graph(0)->setData(x,y);
+    set_scatter_data(plot,x,y);
 
     QVector<double> x2(1),y2(1);
     x2[0] = x[corrdata->data_size()-2];
@@ -312,8 +312,17 @@ void MainWindow::set_scatter_data(QCustomPlot *plot,const QVector<double> &x,con
 void MainWindow::apply_gradient(QCustomPlot *plot)
 {
     const int GRADIENT_BINS = 50;
-    const int FIRST = 3;    // graph(0..2) は通常表示用
     bool on = ui->checkBox_gradient->isChecked();
+
+    // graph(0..2) は通常表示用。グラデーション用のグラフは、その後ろ(最初に作った時点の末尾)に追加する
+    if(on && !gradient_first.contains(plot)){
+        gradient_first[plot] = plot->graphCount();
+    }
+    if(!gradient_first.contains(plot)){
+        plot->graph(0)->setVisible(true);
+        return;
+    }
+    const int FIRST = gradient_first[plot];
 
     if(on){
         while(plot->graphCount() < FIRST + GRADIENT_BINS){

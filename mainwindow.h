@@ -44,6 +44,7 @@ private slots:
 private:
     void set_scatter_data(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y);
     void apply_gradient(QCustomPlot *plot);
+    QMap<QCustomPlot*,int> gradient_first;
     QMap<QCustomPlot*,QPair<QVector<double>,QVector<double>>> scatter_xy;
     QString signal_list_file(const QString &name);
     bool load_signal_list(QListWidget *list, const QString &name);
