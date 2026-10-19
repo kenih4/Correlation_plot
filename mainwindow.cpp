@@ -299,6 +299,62 @@ void MainWindow::plot_trend(QCustomPlot *plot)
 
     plot->replot();
 }
+// 散布図のデータを設定する(古い順に並んだ x,y)
+void MainWindow::set_scatter_data(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y)
+{
+    plot->graph(0)->setData(x,y);
+    scatter_xy[plot] = qMakePair(x,y);
+    apply_gradient(plot);
+}
+
+// Gradient チェックONなら、最古=赤 → 最新=青 のグラデーションで表示する。
+// 1点ごとの色指定はできないため、色ごとのグラフ(GRADIENT_BINS個)に点を振り分ける。
+void MainWindow::apply_gradient(QCustomPlot *plot)
+{
+    const int GRADIENT_BINS = 50;
+    const int FIRST = 3;    // graph(0..2) は通常表示用
+    bool on = ui->checkBox_gradient->isChecked();
+
+    if(on){
+        while(plot->graphCount() < FIRST + GRADIENT_BINS){
+            double t = (plot->graphCount() - FIRST) / (double)(GRADIENT_BINS - 1);
+            QColor col(qRound(255 * (1 - t)), 0, qRound(255 * t));
+            QCPGraph *g = plot->addGraph();
+            g->setPen(QPen(col));
+            g->setLineStyle(QCPGraph::lsNone);
+            g->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle, col, Qt::white, 5));
+        }
+    }
+    plot->graph(0)->setVisible(!on);
+    for(int b=0;b<GRADIENT_BINS && FIRST + b < plot->graphCount();b++){
+        plot->graph(FIRST + b)->setVisible(on);
+    }
+
+    if(on && scatter_xy.contains(plot)){
+        const QVector<double> &x = scatter_xy[plot].first;
+        const QVector<double> &y = scatter_xy[plot].second;
+        int n = x.size();
+        QVector<QVector<double>> bx(GRADIENT_BINS), by(GRADIENT_BINS);
+        for(int i=0;i<n;i++){
+            double t = (n > 1) ? i / (double)(n - 1) : 1.0;
+            int b = qRound(t * (GRADIENT_BINS - 1));
+            bx[b].append(x[i]);
+            by[b].append(y[i]);
+        }
+        for(int b=0;b<GRADIENT_BINS;b++){
+            plot->graph(FIRST + b)->setData(bx[b], by[b]);
+        }
+    }
+}
+
+void MainWindow::on_checkBox_gradient_toggled(bool)
+{
+    for(auto it = scatter_xy.begin(); it != scatter_xy.end(); ++it){
+        apply_gradient(it.key());
+        it.key()->replot();
+    }
+}
+
 void MainWindow::plot_data(QCustomPlot *plot,int n)
 {
     QVector<double> x(corrdata->data_size()),y(corrdata->data_size());
@@ -309,7 +365,7 @@ void MainWindow::plot_data(QCustomPlot *plot,int n)
         x[i] = corrdata->value(corrdata->sig_name(n),i);
         y[i] = corrdata->value(corrdata->sig_name(0),i);
     }
-    plot->graph(0)->setData(x,y);
+    set_scatter_data(plot,x,y);
 
     QVector<double> x2(1),y2(1);
     x2[0] = x[corrdata->data_size()-2];
@@ -630,7 +686,7 @@ void MainWindow::plot_data(QCustomPlot *plot,int n,int beg,int end)
             m++;
         }
     }
-    plot->graph(0)->setData(x,y);
+    set_scatter_data(plot,x,y);
 
     if(ui->checkBox_th->checkState()==Qt::Checked){
         plot->xAxis->setRange(corrdata->get_min(n,0.5,0,ui->V_threshold->text().toDouble()),corrdata->get_max(n,0.5,0,ui->V_threshold->text().toDouble()));

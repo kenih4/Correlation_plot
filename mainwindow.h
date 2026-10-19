@@ -39,8 +39,12 @@ private slots:
     void trendMouseMoved(QMouseEvent *event);
 
     void on_pushButton_3_clicked();
+    void on_checkBox_gradient_toggled(bool checked);
 
 private:
+    void set_scatter_data(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y);
+    void apply_gradient(QCustomPlot *plot);
+    QMap<QCustomPlot*,QPair<QVector<double>,QVector<double>>> scatter_xy;
     QString signal_list_file(const QString &name);
     bool load_signal_list(QListWidget *list, const QString &name);
     void save_signal_list(QListWidget *list, const QString &name);

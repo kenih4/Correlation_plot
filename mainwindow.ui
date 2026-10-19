@@ -336,6 +336,16 @@
               </property>
              </widget>
             </item>
+            <item>
+             <widget class="QCheckBox" name="checkBox_gradient">
+              <property name="toolTip">
+               <string>Oldest shot: red, newest shot: blue (gradation)</string>
+              </property>
+              <property name="text">
+               <string>Gradient</string>
+              </property>
+             </widget>
+            </item>
            </layout>
           </item>
           <item>
