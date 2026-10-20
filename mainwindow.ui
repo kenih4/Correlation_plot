@@ -376,16 +376,6 @@
               </property>
              </widget>
             </item>
-            <item>
-             <widget class="QPushButton" name="pushButton_importance">
-              <property name="toolTip">
-               <string>Rank all signals at once by random forest importance (multivariate)</string>
-              </property>
-              <property name="text">
-               <string>Importance</string>
-              </property>
-             </widget>
-            </item>
            </layout>
           </item>
           <item>

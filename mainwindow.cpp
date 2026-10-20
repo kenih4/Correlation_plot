@@ -579,7 +579,7 @@ void MainWindow::on_checkBox_detrend_toggled(bool checked)
 
 // 全信号を同時に使ったランダムフォレストの重要度を表にして出す。
 // 1信号ずつのMIC/rhoと違い、似た信号の重複や他の信号の影響を踏まえた順位になる。
-void MainWindow::on_pushButton_importance_clicked()
+void MainWindow::show_importance()
 {
     if(corrdata->sig_size()<3 || corrdata->data_size()<2){
         QMessageBox::information(this,"Importance","Get/Plot でデータを取得し、信号を3つ以上(基準信号+2つ以上)にしてください。");
@@ -955,6 +955,11 @@ void MainWindow::createActions()
     connect(saveAct, &QAction::triggered, this, &MainWindow::save);
     fileMenu->addAction(saveAct);
     //    fileToolBar->addAction(saveAct);
+
+    QAction *importanceAct = new QAction(tr("&Importance..."), this);
+    importanceAct->setStatusTip(tr("Rank all signals at once by random forest importance (multivariate)"));
+    connect(importanceAct, &QAction::triggered, this, &MainWindow::show_importance);
+    fileMenu->addAction(importanceAct);
 
     fileMenu->addSeparator();
 
