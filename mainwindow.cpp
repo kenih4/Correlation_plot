@@ -7,6 +7,9 @@
 #include <QFileInfo>
 #include <QTextStream>
 #include <QDebug>
+#include <QToolButton>
+#include <QGridLayout>
+#include <QScreen>
 #include <QDialog>
 #include <QTableWidget>
 #include <QHeaderView>
@@ -39,6 +42,7 @@ MainWindow::MainWindow(QWidget *parent)
     plot_init(ui->widget_7);
     plot_init(ui->widget_8);
     plot_init(ui->widget_9);
+    create_extra_plots();
     plot_init(ui->widget);
 
     if(!load_signal_list(ui->listWidget,"signals.txt")){
@@ -244,6 +248,7 @@ void MainWindow::on_pushButton_clicked()
     plot_data(ui->widget_7,corrdata->get_ranking(4));
     plot_data(ui->widget_8,corrdata->get_ranking(5));
     plot_data(ui->widget_9,corrdata->get_ranking(6));
+    plot_extra(true);
     plot_trend(ui->widget);
     mark_calculated();
     corrdata->outfile(CSV_FILE);
@@ -390,6 +395,7 @@ void MainWindow::set_info_text(QCustomPlot *plot,int n,const QString &best,const
         b.text->setBrush(QBrush(QColor(255,255,255,230)));
     }
     double mic = corrdata->mic(n);
+    b.text->setVisible(true);
     b.text->setFont(font);
     // 重要度順のときは重要度[%]を併記する
     QString impLine;
@@ -448,6 +454,103 @@ void MainWindow::hide_recent_points(QCustomPlot *plot)
     if(recent.contains(plot) && recent[plot].g3){
         recent[plot].g3->setVisible(false);
         recent[plot].g4->setVisible(false);
+    }
+}
+
+// 散布図を6つ追加した領域(初期は非表示)と、右下の開閉ボタンを作る
+void MainWindow::create_extra_plots()
+{
+    extra_container = new QWidget(ui->centralwidget);
+    QGridLayout *grid = new QGridLayout(extra_container);
+    grid->setContentsMargins(0,0,0,0);
+    for(int k=0;k<6;k++){
+        QCustomPlot *p = new QCustomPlot(extra_container);
+        p->setMinimumSize(248,230);
+        plot_init(p);
+        grid->addWidget(p,k/3,k%3);
+        extra_plots.append(p);
+    }
+    extra_container->hide();
+    ui->verticalLayout_5->addWidget(extra_container,2);   // 既存の2段(各1)に対して2段分
+
+    extra_button = new QToolButton(ui->centralwidget);
+    extra_button->setArrowType(Qt::DownArrow);
+    extra_button->setAutoRaise(true);
+    extra_button->setFixedSize(24,20);
+    extra_button->setToolTip(tr("Show 6 more scatter plots"));
+    connect(extra_button,&QToolButton::clicked,this,&MainWindow::toggle_extra_plots);
+    QHBoxLayout *bar = new QHBoxLayout;
+    bar->setContentsMargins(0,0,5,2);
+    bar->addStretch(1);
+    bar->addWidget(extra_button);
+    ui->verticalLayout_5->addLayout(bar);
+}
+
+// 下矢印ボタン: ウィンドウを下に広げて散布図を6つ追加(合計12個)/元に戻す
+void MainWindow::toggle_extra_plots()
+{
+    bool resizable = !isMaximized() && !isFullScreen();
+    if(!extra_visible){
+        extra_dh = extra_container->sizeHint().height() + ui->verticalLayout_5->spacing();
+        extra_container->show();
+        extra_visible = true;
+        extra_button->setArrowType(Qt::UpArrow);
+        extra_button->setToolTip(tr("Hide the extra scatter plots"));
+        if(resizable){
+            int h = height() + extra_dh;
+            if(screen())h = qMin(h,screen()->availableGeometry().height());
+            resize(width(),h);
+        }
+        plot_extra(true);       // 今ある計算結果で7〜12位を描く
+    }else{
+        extra_container->hide();
+        extra_visible = false;
+        extra_button->setArrowType(Qt::DownArrow);
+        extra_button->setToolTip(tr("Show 6 more scatter plots"));
+        if(resizable){
+            resize(width(),qMax(minimumSizeHint().height(),height()-extra_dh));
+        }
+    }
+}
+
+// 空の信号順位(信号が足りない)のグラフは、基準信号同士の無意味な図にならないよう空にする
+void MainWindow::clear_plot(QCustomPlot *plot)
+{
+    for(int i=0;i<plot->graphCount();i++)plot->graph(i)->data()->clear();
+    if(binned.contains(plot)){
+        if(binned[plot].text)binned[plot].text->setVisible(false);
+        if(binned[plot].err)binned[plot].err->data().clear();
+    }
+    scatter_xy.remove(plot);
+    plot->xAxis->setLabel(QString());
+    plot->yAxis->setLabel(QString());
+    plot->replot(QCustomPlot::rpQueuedReplot);
+}
+
+// 7〜12位の散布図(下矢印ボタンで開いているときだけ)
+void MainWindow::plot_extra(bool b)
+{
+    if(!extra_visible || corrdata->sig_size()<2 || corrdata->data_size()<2)return;
+    for(int k=0;k<extra_plots.size();k++){
+        int rank = 7+k;
+        if(rank>=corrdata->sig_size()){
+            clear_plot(extra_plots[k]);
+            continue;
+        }
+        plot_data(extra_plots[k],corrdata->get_ranking(rank,b));
+    }
+}
+
+void MainWindow::plot_extra_range(int beg,int end)
+{
+    if(!extra_visible || corrdata->sig_size()<2)return;
+    for(int k=0;k<extra_plots.size();k++){
+        int rank = 7+k;
+        if(rank>=corrdata->sig_size()){
+            clear_plot(extra_plots[k]);
+            continue;
+        }
+        plot_data(extra_plots[k],corrdata->get_ranking(rank),beg,end);
     }
 }
 
@@ -555,6 +658,7 @@ void MainWindow::refresh_plots()
     plot_data(ui->widget_7,corrdata->get_ranking(4,b));
     plot_data(ui->widget_8,corrdata->get_ranking(5,b));
     plot_data(ui->widget_9,corrdata->get_ranking(6,b));
+    plot_extra(b);
     mark_calculated();
 }
 
@@ -914,6 +1018,7 @@ void MainWindow::update_data()
     plot_data(ui->widget_7,corrdata->get_ranking(4,b));
     plot_data(ui->widget_8,corrdata->get_ranking(5,b));
     plot_data(ui->widget_9,corrdata->get_ranking(6,b));
+    plot_extra(b);
     plot_trend(ui->widget);
     mark_calculated();
     if(cnt>0)
@@ -1030,6 +1135,7 @@ void MainWindow::on_pushButton_3_clicked()
     plot_data(ui->widget_7,corrdata->get_ranking(4),beg,end);
     plot_data(ui->widget_8,corrdata->get_ranking(5),beg,end);
     plot_data(ui->widget_9,corrdata->get_ranking(6),beg,end);
+    plot_extra_range(beg,end);
     DLOG<<beg<<"   "<<end<<endl;
 
     ui->widget->xAxis->setRange(beg,end);
