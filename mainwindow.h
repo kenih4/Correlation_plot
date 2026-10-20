@@ -49,6 +49,11 @@ private:
     void set_scatter_data(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y);
     void apply_gradient(QCustomPlot *plot);
     void refresh_plots();
+    QString calc_signature();
+    void mark_calculated();
+    bool has_calculated = false;
+    unsigned last_version = 0;
+    QString last_signature;
     void set_recent_points(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y);
     void hide_recent_points(QCustomPlot *plot);
     struct RecentGraphs{

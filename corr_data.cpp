@@ -26,7 +26,7 @@ void Corr_data::get_tag(string endtime)
     status = db_get_data_num_f(sep5u.c_str(),endtime.c_str(),size,&get_inf_sep5u,&get_inf_cnt_sep5u);
     if(status==0 && get_inf_cnt_sep5u>0){
         for(int i=0;i<get_inf_cnt_sep5u;i++){
-            cerr<<(get_inf_sep5u+i)->evno << "  " << (get_inf_sep5u+i)->tdata<<endl;
+            DLOG<<(get_inf_sep5u+i)->evno << "  " << (get_inf_sep5u+i)->tdata<<endl;
             db_unixtime_us_to_date((get_inf_sep5u+i)->unixtime_us,out);
             status = db_get_data_num_i(route.c_str(),out,60,&get_inf_route,&get_inf_cnt_route);
             if(status==0 && get_inf_cnt_route>0){
@@ -75,7 +75,7 @@ void Corr_data::get_tag(string begtime,string endtime)
         size = get_inf_cnt_sep5u;
         data.resize(size);
         for(int i=0;i<get_inf_cnt_sep5u;i++){
-            cerr<<(get_inf_sep5u+i)->evno << "  " << (get_inf_sep5u+i)->tdata<<endl;
+            DLOG<<(get_inf_sep5u+i)->evno << "  " << (get_inf_sep5u+i)->tdata<<endl;
             db_unixtime_us_to_date((get_inf_sep5u+i)->unixtime_us,out);
             status = db_get_data_num_i(route.c_str(),out,60,&get_inf_route,&get_inf_cnt_route);
             if(status==0 && get_inf_cnt_route>0){
@@ -126,7 +126,7 @@ void Corr_data::db_get_sync_data()
             }
         }
     }
-    cerr<<"num_siglist  =  "<<siglist.num_signal<<endl;
+    DLOG<<"num_siglist  =  "<<siglist.num_signal<<endl;
     for(int n=0;n<size;n++){
         status = db_get_data_multi(&siglist,data[n].beg_time.c_str(),data[n].end_time.c_str(),1,0);
         if(status == 0){
@@ -165,7 +165,7 @@ void Corr_data::db_get_sync_data()
             }
         }
     }
-    cerr<<"num_siglist  =  "<<siglist.num_signal<<endl;
+    DLOG<<"num_siglist  =  "<<siglist.num_signal<<endl;
     for(int n=0;n<size;n++){
         status = db_get_data_multi(&siglist,data[n].beg_time.c_str(),data[n].end_time.c_str(),1,0);
         if(status == 0){
@@ -395,13 +395,22 @@ void Corr_data::update_importance(bool use_th,double th,int beg,int end)
     imp_valid = true;
 }
 
+void Corr_data::set_self_stats()
+{
+    if(sig.empty())return;
+    sig[0].coefficient = 1.0;   // 順位付けで常に先頭(0位)になるようにする
+    sig[0].rho = 1.0;
+    sig[0].pval = 0.0;
+    sig[0].mic_null = 0.0;
+}
 void Corr_data::calc_mic()
 {
     MINE *mine;
     double *x,*y;
     int n;
     double alpha=0.85;
-    for(int i=0;i<(int)sig.size();i++){
+    set_self_stats();
+    for(int i=1;i<(int)sig.size();i++){
         n = size;
         x = new double [n];
         y = new double [n];
@@ -434,7 +443,8 @@ void Corr_data::calc_mic(double th)
             n++;
         }
     }
-    for(int i=0;i<(int)sig.size();i++){
+    set_self_stats();
+    for(int i=1;i<(int)sig.size();i++){
         if(n<2){
             sig[i].coefficient = 0;
             sig[i].rho = 0;
@@ -482,7 +492,8 @@ void Corr_data::calc_mic(int beg,int end)
             n++;
         }
     }
-    for(int i=0;i<(int)sig.size();i++){
+    set_self_stats();
+    for(int i=1;i<(int)sig.size();i++){
         if(n<2){
             sig[i].coefficient = 0;
             sig[i].rho = 0;
@@ -621,7 +632,7 @@ int Corr_data::get_ranking(int ranking)
         }
     }
     for(int i=0;i<(int)sig.size();i++){
-        //cerr<<"i="<<i<<" coeff = "<<sig[i].coefficient<<" rank = "<<rank[i]<<endl;
+        //DLOG<<"i="<<i<<" coeff = "<<sig[i].coefficient<<" rank = "<<rank[i]<<endl;
         if(rank[i] == ranking)ret = i;
     }
 
@@ -638,6 +649,7 @@ void Corr_data::erase()
 {
     data.erase(data.begin());
     size-=1;
+    ver++;
 }
 
 void Corr_data::erase(int n)
@@ -646,6 +658,7 @@ void Corr_data::erase(int n)
         data.erase(data.begin());
         size-=1;
     }
+    if(n>0)ver++;
 }
 int Corr_data::add_tag(string strtime)
 {
@@ -672,7 +685,7 @@ int Corr_data::add_tag(string strtime)
     for(size_t k=data.size();k>0;k--){
         if(!data[k-1].end_time.empty()){last_end = data[k-1].end_time;break;}
     }
-    cerr<<last_end.c_str()<<"  "<<first_beg.c_str()<<"  "<<strtime.c_str()<<endl;
+    DLOG<<last_end.c_str()<<"  "<<first_beg.c_str()<<"  "<<strtime.c_str()<<endl;
 
     auto parse_time = [](const string &s,time_t &t)->bool{
         struct tm tmv;
@@ -692,7 +705,7 @@ int Corr_data::add_tag(string strtime)
     if(!parse_time(strtime,t_buf))return 0;
     bool have_ref = !first_beg.empty() && !last_end.empty()
             && parse_time(first_beg,t_end) && parse_time(last_end,t_beg);
-    cerr<<t_beg<<"   "<<t_end<<"   "<<t_buf<<endl;
+    DLOG<<t_beg<<"   "<<t_end<<"   "<<t_buf<<endl;
 
     if(!have_ref){
         // 有効なデータが1件もない: 直近600秒を探す
@@ -704,7 +717,7 @@ int Corr_data::add_tag(string strtime)
         if(t_end-t_buf>600){
             begtime = format_time(t_end-600*cnt);
         }
-        cerr<<begtime.c_str()<<"  "<<endtime.c_str()<<endl;
+        DLOG<<begtime.c_str()<<"  "<<endtime.c_str()<<endl;
     }else if(t_buf>t_beg){
         begtime = last_end;
         endtime = strtime;
@@ -715,7 +728,7 @@ int Corr_data::add_tag(string strtime)
         return 0;
     }
 
-    cerr<<begtime.c_str()<<"  "<<endtime.c_str()<<endl;
+    DLOG<<begtime.c_str()<<"  "<<endtime.c_str()<<endl;
 
     //    if(strtime<data.front().beg_time){
     //        endtime = data.front().beg_time;
@@ -732,7 +745,7 @@ int Corr_data::add_tag(string strtime)
     int added = 0;  // 実際にdataへ追加できたショット数
     if(status==0 && get_inf_cnt_sep5u>0){
         for(int i=0;i<get_inf_cnt_sep5u;i++){
-            cerr<<(get_inf_sep5u+i)->evno << "  " << (get_inf_sep5u+i)->tdata<<endl;
+            DLOG<<(get_inf_sep5u+i)->evno << "  " << (get_inf_sep5u+i)->tdata<<endl;
             db_unixtime_us_to_date((get_inf_sep5u+i)->unixtime_us,out);
             status = db_get_data_num_i(route.c_str(),out,60,&get_inf_route,&get_inf_cnt_route);
             if(status==0 && get_inf_cnt_route>0){
@@ -760,7 +773,7 @@ int Corr_data::add_tag(string strtime)
                         break;
                     }
                 }
-                cerr<<"beg = "<<d.beg_time<<
+                DLOG<<"beg = "<<d.beg_time<<
                       "  end = "<<d.end_time<<
                       "  sacla = "<<d.sacla_tag<<
                       "  sr = "<<d.sr_tag<<endl;
@@ -776,8 +789,9 @@ int Corr_data::add_tag(string strtime)
         free(get_inf_sep5u);
     }
     sort(data.begin(),data.end());
+    if(added>0)ver++;
     if(added==0){
-        cerr<<added<<endl;
+        DLOG<<added<<endl;
         cnt++;
     }else{
         cnt = 0;
@@ -791,6 +805,14 @@ void Corr_data::add_db_get_sync_data()
     DB_SIGNAL_STRUCT siglist;
     DB_SIGNAL_DATA* tData;
     Db_f_data *fdata;
+
+    // 値(value/denominator)の個数が増えたかでデータ更新を検出する
+    auto stored = [this]()->size_t{
+        size_t t = 0;
+        for(size_t k=0;k<data.size();k++)t += data[k].value.size()+data[k].denominator.size();
+        return t;
+    };
+    size_t stored_before = stored();
 
     for(int n=0;n<size;n++){
         status = db_init_signal_list(&siglist);
@@ -875,6 +897,7 @@ void Corr_data::add_db_get_sync_data()
             db_release_signal_list_all(&siglist);
         }
     }
+    if(stored()!=stored_before)ver++;
 }
 #include <QFile>
 #include <QDir>
@@ -906,8 +929,11 @@ void Corr_data::outfile(string fname)
         for(int i=0;i<size;i++){
             out << data[i].sacla_tag<<",";
             out << data[i].sr_tag<<",";
-            out << regex_replace(data[i].beg_time,regex(" "),"-").c_str()<<",";
-            out << regex_replace(data[i].end_time,regex(" "),"-").c_str()<<",";
+            string bt = data[i].beg_time, et = data[i].end_time;
+            replace(bt.begin(),bt.end(),' ','-');
+            replace(et.begin(),et.end(),' ','-');
+            out << bt.c_str()<<",";
+            out << et.c_str()<<",";
             for(int j=0;j<(int)sig_d.size();j++){
                 out<<data[i].value[sig[0].name]/data[i].denominator[sig_d[j].name]*100<<",";
             }

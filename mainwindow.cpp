@@ -214,13 +214,13 @@ void MainWindow::on_pushButton_clicked()
 
     corrdata->get_tag(ui->dateTimeEdit->dateTime().toString("yyyy/MM/dd HH:mm:ss").toStdString());
     corrdata->db_get_sync_data();
-    for(int i=0;i<corrdata->data_size();i++){
-        cerr<<"beg = "<<corrdata->begtime(i)<<
+    for(int i=0;corr_debug() && i<corrdata->data_size();i++){
+        DLOG<<"beg = "<<corrdata->begtime(i)<<
               "  end = "<<corrdata->endtime(i)<<
               "  sacla = "<< corrdata->sacla_tag(i)<<
               "  sr = "<<corrdata->sr_tag(i)<<endl;
         for(int j=0;j<corrdata->sig_size();j++){
-            cerr<<i<<" "<<j<<"  "<<
+            DLOG<<i<<" "<<j<<"  "<<
                   corrdata->sig_name(j)<<"  "<<
                   corrdata->value(corrdata->sig_name(j),i)<<endl;
         }
@@ -232,8 +232,8 @@ void MainWindow::on_pushButton_clicked()
         corrdata->calc_mic();
     }
     corrdata->update_importance(ui->checkBox_th->checkState()==Qt::Checked,ui->V_threshold->text().toDouble());
-    for(int j=0;j<corrdata->sig_size();j++){
-        cerr<<" "<<j<<"  "<<
+    for(int j=0;corr_debug() && j<corrdata->sig_size();j++){
+        DLOG<<" "<<j<<"  "<<
               corrdata->sig_name(j)<<"  "<<
               corrdata->mic(j)<<endl;
     }
@@ -245,6 +245,7 @@ void MainWindow::on_pushButton_clicked()
     plot_data(ui->widget_8,corrdata->get_ranking(5));
     plot_data(ui->widget_9,corrdata->get_ranking(6));
     plot_trend(ui->widget);
+    mark_calculated();
     corrdata->outfile(CSV_FILE);
 
 }
@@ -272,17 +273,17 @@ void MainWindow::plot_trend(QCustomPlot *plot)
     QSharedPointer<QCPAxisTickerDateTime> dateTicker(new QCPAxisTickerDateTime);
     dateTicker->setDateTimeFormat("HH:mm:ss");
     plot->xAxis->setTicker(dateTicker);
-    //    cerr<<"****  "<<corrdata->sig_name(n)<<"  1****"<<endl;
+    //    DLOG<<"****  "<<corrdata->sig_name(n)<<"  1****"<<endl;
     for(int i=0;i<corrdata->data_size();i++){
         x[i] = QDateTime::fromString(QString::fromStdString(corrdata->endtime(i)),"yyyy/MM/dd HH:mm:ss.z").toSecsSinceEpoch();
         y[i] = corrdata->value(corrdata->sig_name(0),i);
         //        y[i] = corrdata->value(corrdata->sig_name(0),i)/(corrdata->denominator(corrdata->sig_d_name(0),i)*1e-9/(1.60219e-19))*100;
     }
-    //    cerr<<"****  "<<corrdata->sig_name(n)<<"  2****"<<endl;
+    //    DLOG<<"****  "<<corrdata->sig_name(n)<<"  2****"<<endl;
     set_scatter_data(plot,x,y);
 
     set_recent_points(plot,x,y);
-    //    cerr<<"****  "<<corrdata->sig_name(n)<<"  2****"<<endl;
+    //    DLOG<<"****  "<<corrdata->sig_name(n)<<"  2****"<<endl;
 
     if(ui->checkBox_th->checkState()==Qt::Checked){
         plot->yAxis->setRange(corrdata->get_min(0,0.5,0,ui->V_threshold->text().toDouble()),corrdata->get_max(0,0.5,0,ui->V_threshold->text().toDouble()));
@@ -292,7 +293,7 @@ void MainWindow::plot_trend(QCustomPlot *plot)
     }
     plot->xAxis->setRange(x[0]-60,x[corrdata->data_size()-1]+60);
     //plot->graph(0)->rescaleAxes(true);
-    //    cerr<<"****  "<<corrdata->sig_name(n)<<"  3****"<<endl;
+    //    DLOG<<"****  "<<corrdata->sig_name(n)<<"  3****"<<endl;
     plot->xAxis->setLabel("time");
     plot->yAxis->setLabel(tr(corrdata->sig_name(0).c_str()));
     if(ui->checkBox_calc->checkState()==Qt::Checked){
@@ -300,7 +301,7 @@ void MainWindow::plot_trend(QCustomPlot *plot)
     }
     plot->axisRect()->insetLayout()->setInsetAlignment(0,Qt::AlignTop|Qt::AlignRight);
     plot->setInteractions(QCP::iRangeDrag|QCP::iRangeZoom);
-    //    cerr<<"****  "<<corrdata->sig_name(n)<<"  4****"<<endl;
+    //    DLOG<<"****  "<<corrdata->sig_name(n)<<"  4****"<<endl;
     QVector<double> x4(2),y4(2);
     x4[0] = x4[1] = y4[0] = y4[1] = 0;
     ui->widget->graph(3)->setData(x4,y4);
@@ -502,6 +503,33 @@ void MainWindow::apply_gradient(QCustomPlot *plot)
     }
 }
 
+// 計算結果に影響する設定を1つの文字列にまとめる(変わったかどうかの比較用)
+QString MainWindow::calc_signature()
+{
+    QStringList parts;
+    parts << QString::number(ui->checkBox_th->checkState())
+          << ui->V_threshold->text()
+          << QString::number(ui->checkBox_calc->checkState())
+          << QString::number(ui->checkBox_detrend->isChecked())
+          << QString::number(ui->checkBox_stats->isChecked())
+          << QString::number(ui->checkBox_importance->isChecked())
+          << QString::number(ui->checkBox_fix->checkState())
+          << QString::number(ui->checkBox_add->checkState())
+          << QString::number(ui->spinBox->value());
+    for(int i=0;i<ui->listWidget->count();i++)parts << ui->listWidget->item(i)->text();
+    parts << "|";
+    for(int i=0;i<ui->listWidget_2->count();i++)parts << ui->listWidget_2->item(i)->text();
+    return parts.join("\n");
+}
+
+// 今の状態で計算と描画を済ませたことを記録する
+void MainWindow::mark_calculated()
+{
+    has_calculated = true;
+    last_version = corrdata->data_version();
+    last_signature = calc_signature();
+}
+
 // 保持しているデータからMIC等を計算し直して6枚の散布図を描き直す(DBは読まない)
 void MainWindow::refresh_plots()
 {
@@ -519,6 +547,7 @@ void MainWindow::refresh_plots()
     plot_data(ui->widget_7,corrdata->get_ranking(4,b));
     plot_data(ui->widget_8,corrdata->get_ranking(5,b));
     plot_data(ui->widget_9,corrdata->get_ranking(6,b));
+    mark_calculated();
 }
 
 void MainWindow::on_checkBox_stats_toggled(bool checked)
@@ -720,20 +749,20 @@ void MainWindow::plot_data(QCustomPlot *plot,int n)
 }
 void MainWindow::on_treeWidget_itemDoubleClicked(QTreeWidgetItem *item, int column)
 {
-    cerr<<column<<item->text(column).toStdString()<<endl;
-    cerr<<ui->listWidget->count()<<endl;
-    cerr<<item->childCount()<<endl;
+    DLOG<<column<<item->text(column).toStdString()<<endl;
+    DLOG<<ui->listWidget->count()<<endl;
+    DLOG<<item->childCount()<<endl;
     if(item->childCount()!=0)return;
 
     if(ui->radioButton_2->isChecked()){
         for(int i= 0;i<ui->listWidget_2->count();++i){
-            cerr<<ui->listWidget_2->item(i)->text().toStdString()<<endl;
+            DLOG<<ui->listWidget_2->item(i)->text().toStdString()<<endl;
             if(ui->listWidget_2->item(i)->text().toStdString().compare(item->text(column).toStdString())==0)return;
         }
         ui->listWidget_2->addItem(item->text(column));
     }else{
         for(int i= 0;i<ui->listWidget->count();++i){
-            cerr<<ui->listWidget->item(i)->text().toStdString()<<endl;
+            DLOG<<ui->listWidget->item(i)->text().toStdString()<<endl;
             if(ui->listWidget->item(i)->text().toStdString().compare(item->text(column).toStdString())==0)return;
         }
         ui->listWidget->addItem(item->text(column));
@@ -824,15 +853,22 @@ void MainWindow::update_data()
     corrdata->add_db_get_sync_data();
 
     if(cnt>0)
-        cerr<<"*Data size = "<<corrdata->data_size()<<endl;
+        DLOG<<"*Data size = "<<corrdata->data_size()<<endl;
 
     if(ui->checkBox_add->checkState()!=Qt::Checked
             && corrdata->data_size()>ui->spinBox->value()){
         corrdata->erase(corrdata->data_size()-ui->spinBox->value());
         if(cnt>0)
-            cerr<<"***Data size = "<<corrdata->data_size()<<endl;
+            DLOG<<"***Data size = "<<corrdata->data_size()<<endl;
     }
 
+
+    // 新しいショットも値の更新も設定の変更もなければ、計算と再描画は結果が変わらないので省く
+    if(cnt<=0 && has_calculated
+            && corrdata->data_version()==last_version
+            && calc_signature()==last_signature){
+        return;
+    }
 
     if(ui->checkBox_th->checkState()==Qt::Checked){
         corrdata->calc_mic(ui->V_threshold->text().toDouble());
@@ -840,9 +876,9 @@ void MainWindow::update_data()
         corrdata->calc_mic();
     }
     corrdata->update_importance(ui->checkBox_th->checkState()==Qt::Checked,ui->V_threshold->text().toDouble());
-    if(cnt>0)
+    if(cnt>0 && corr_debug())
         for(int j=0;j<corrdata->sig_size();j++){
-            cerr<<" "<<j<<"  "<<
+            DLOG<<" "<<j<<"  "<<
                   corrdata->sig_name(j)<<"  "<<
                   corrdata->mic(j)<<endl;
         }
@@ -858,6 +894,7 @@ void MainWindow::update_data()
     plot_data(ui->widget_8,corrdata->get_ranking(5,b));
     plot_data(ui->widget_9,corrdata->get_ranking(6,b));
     plot_trend(ui->widget);
+    mark_calculated();
     if(cnt>0)
         corrdata->outfile(CSV_FILE);
 
@@ -956,10 +993,10 @@ void MainWindow::on_pushButton_3_clicked()
         beg = ui->widget->graph(3)->data()->begin()->key;
         end = ui->widget->graph(4)->data()->begin()->key;
     }
-    cerr<<beg<<"   "<<end<<endl;
+    DLOG<<beg<<"   "<<end<<endl;
     corrdata->calc_mic(beg,end);
     corrdata->update_importance(false,0,beg,end);
-    cerr<<beg<<"   "<<end<<endl;
+    DLOG<<beg<<"   "<<end<<endl;
 
     plot_data(ui->widget_1,corrdata->get_ranking(1),beg,end);
     plot_data(ui->widget_2,corrdata->get_ranking(2),beg,end);
@@ -967,7 +1004,7 @@ void MainWindow::on_pushButton_3_clicked()
     plot_data(ui->widget_7,corrdata->get_ranking(4),beg,end);
     plot_data(ui->widget_8,corrdata->get_ranking(5),beg,end);
     plot_data(ui->widget_9,corrdata->get_ranking(6),beg,end);
-    cerr<<beg<<"   "<<end<<endl;
+    DLOG<<beg<<"   "<<end<<endl;
 
     ui->widget->xAxis->setRange(beg,end);
     ui->widget->replot();
@@ -988,7 +1025,7 @@ void MainWindow::plot_data(QCustomPlot *plot,int n,int beg,int end)
             m++;
         }
     }
-    cerr<<"m = "<<m<<endl;
+    DLOG<<"m = "<<m<<endl;
     QVector<double> x(m),y(m);
     m=0;
     for(int i=0;i<corrdata->data_size();i++){

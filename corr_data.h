@@ -14,6 +14,13 @@
 
 using namespace std;
 
+// 環境変数 CORR_DEBUG が設定されているときだけ詳細ログを出す(出さないときは引数を評価しない)
+inline bool corr_debug(){
+    static const bool d = getenv("CORR_DEBUG")!=NULL;
+    return d;
+}
+#define DLOG if(!corr_debug()){}else cerr
+
 typedef struct Data{
     int64_t sacla_tag;
     int64_t sr_tag;
@@ -102,6 +109,7 @@ public:
     int add_tag(string strtime);
     void add_db_get_sync_data();
     void rank_init(){rank.resize(0);};
+    unsigned data_version(){return ver;};   // データが変わるたびに増える(変化の検出用)
     void set_stats(bool f){stats_flg = f;};
     void set_detrend(bool f){detrend_flg = f;};
     static void detrend(double *v,int n);
@@ -113,7 +121,7 @@ public:
     bool rank_importance(){return rank_imp && imp_valid;};
     void update_importance(bool use_th,double th,int beg=-1,int end=-1);
     double importance(int n){return sig[n].importance;};
-    void set_flg(int f){dflg = f;cerr<<dflg<<endl;};
+    void set_flg(int f){dflg = f;DLOG<<dflg<<endl;};
     void outfile(string);
 private:
     static double mic_alpha(int n);
@@ -125,6 +133,8 @@ private:
     vector<Data> data;
     vector<int> rank;
     int dflg;
+    unsigned ver = 0;
+    void set_self_stats();      // 基準信号自身の指標(MIC=1など)。計算せず固定値にする
     bool rank_imp = false;      // 順位を重要度で決めるか
     bool imp_valid = false;     // 重要度が計算できているか(データ不足のときはMIC順に戻す)
     double score(int i){return (rank_imp && imp_valid) ? sig[i].importance : sig[i].coefficient;}
