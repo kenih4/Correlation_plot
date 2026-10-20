@@ -786,7 +786,20 @@ void Corr_data::add_db_get_sync_data()
     };
     size_t stored_before = stored();
 
+    // 値が足りないショットを、DB APIを呼ばずに先に調べる(足りなければ何も呼ばない)
+    vector<int> need_sig,need_den;
     for(int n=0;n<size;n++){
+        bool miss = false;
+        for(size_t i=0;i<sig.size() && !miss;i++)miss = (data[n].value.count(sig[i].name)==0);
+        if(miss)need_sig.push_back(n);
+        miss = false;
+        for(size_t i=0;i<sig_d.size() && !miss;i++)miss = (data[n].denominator.count(sig_d[i].name)==0);
+        if(miss)need_den.push_back(n);
+    }
+    if(need_sig.empty() && need_den.empty())return;
+
+    for(size_t q=0;q<need_sig.size();q++){
+        int n = need_sig[q];
         status = db_init_signal_list(&siglist);
         if(status == 0){
             for(auto itr = sig.begin();itr != sig.end(); ++itr){
@@ -828,7 +841,8 @@ void Corr_data::add_db_get_sync_data()
         }
     }
 
-    for(int n=0;n<size;n++){
+    for(size_t q=0;q<need_den.size();q++){
+        int n = need_den[q];
         status = db_init_signal_list(&siglist);
         if(status == 0){
             for(auto itr = sig_d.begin();itr != sig_d.end(); ++itr){
