@@ -48,6 +48,13 @@ private:
     void set_scatter_data(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y);
     void apply_gradient(QCustomPlot *plot);
     void refresh_plots();
+    void set_recent_points(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y);
+    void hide_recent_points(QCustomPlot *plot);
+    struct RecentGraphs{
+        QCPGraph *g3 = nullptr;
+        QCPGraph *g4 = nullptr;
+    };
+    QMap<QCustomPlot*,RecentGraphs> recent;
     void detrend_xy(QVector<double> &x,QVector<double> &y);
     void set_range_from(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y);
     QString update_binned_curve(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y);

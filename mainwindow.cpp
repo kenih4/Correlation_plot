@@ -252,9 +252,9 @@ void MainWindow::plot_init(QCustomPlot *plot)
     plot->graph(0)->setLineStyle(QCPGraph::lsNone);
     plot->graph(0)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle, Qt::red, Qt::white, 5));
     plot->addGraph();
-    plot->graph(1)->setPen(QPen(Qt::blue));
+    plot->graph(1)->setPen(QPen(QColor("#8000ff")));
     plot->graph(1)->setLineStyle(QCPGraph::lsNone);
-    plot->graph(1)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,"#0000ff", "#8f0000ff", 5));
+    plot->graph(1)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,"#8000ff", "#8f8000ff", 5));
     plot->addGraph();
     plot->graph(2)->setPen(QPen(Qt::blue));
     plot->graph(2)->setLineStyle(QCPGraph::lsNone);
@@ -278,15 +278,7 @@ void MainWindow::plot_trend(QCustomPlot *plot)
     //    cerr<<"****  "<<corrdata->sig_name(n)<<"  2****"<<endl;
     set_scatter_data(plot,x,y);
 
-    QVector<double> x2(1),y2(1);
-    x2[0] = x[corrdata->data_size()-2];
-    y2[0] = y[corrdata->data_size()-2];
-    plot->graph(1)->setData(x2,y2);
-
-    QVector<double> x3(1),y3(1);
-    x3[0] = x[corrdata->data_size()-1];
-    y3[0] = y[corrdata->data_size()-1];
-    plot->graph(2)->setData(x3,y3);
+    set_recent_points(plot,x,y);
     //    cerr<<"****  "<<corrdata->sig_name(n)<<"  2****"<<endl;
 
     if(ui->checkBox_th->checkState()==Qt::Checked){
@@ -404,6 +396,44 @@ void MainWindow::set_info_text(QCustomPlot *plot,int n,const QString &best,const
     // 偶然の範囲を超えていれば赤字
     bool significant = mic>nul && corrdata->pval(n)<0.05;
     b.text->setColor(significant ? QColor(200,0,0) : QColor(60,60,60));
+}
+
+// 最新の4点を色分けして重ねる: 最新=大きい青(graph(2))、2番目=小さい紫(graph(1))、
+// 3番目=小さいマゼンタ、4番目=小さいオレンジ。それより古い点は通常の赤(またはグラデーション)
+void MainWindow::set_recent_points(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y)
+{
+    RecentGraphs &r = recent[plot];
+    if(!r.g3){
+        r.g3 = plot->addGraph();
+        r.g3->setPen(QPen(QColor("#ff00ff")));
+        r.g3->setLineStyle(QCPGraph::lsNone);
+        r.g3->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,"#ff00ff","#8fff00ff",5));
+        r.g4 = plot->addGraph();
+        r.g4->setPen(QPen(QColor("#ff8000")));
+        r.g4->setLineStyle(QCPGraph::lsNone);
+        r.g4->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,"#ff8000","#8fff8000",5));
+    }
+    auto pick = [&x,&y](QCPGraph *g,int back){
+        QVector<double> xs,ys;
+        if(x.size()>=back && y.size()>=back){
+            xs.append(x[x.size()-back]);
+            ys.append(y[y.size()-back]);
+        }
+        g->setData(xs,ys);
+        g->setVisible(true);
+    };
+    pick(plot->graph(2),1);
+    pick(plot->graph(1),2);
+    pick(r.g3,3);
+    pick(r.g4,4);
+}
+
+void MainWindow::hide_recent_points(QCustomPlot *plot)
+{
+    if(recent.contains(plot) && recent[plot].g3){
+        recent[plot].g3->setVisible(false);
+        recent[plot].g4->setVisible(false);
+    }
 }
 
 // 散布図のデータを設定する(古い順に並んだ x,y)
@@ -638,19 +668,7 @@ void MainWindow::plot_data(QCustomPlot *plot,int n)
     set_scatter_data(plot,x,y);
     QString best = update_binned_curve(plot,x,y);
 
-    QVector<double> x2,y2;
-    if(x.size()>=2){
-        x2.append(x[x.size()-2]);
-        y2.append(y[y.size()-2]);
-    }
-    plot->graph(1)->setData(x2,y2);
-
-    QVector<double> x3,y3;
-    if(x.size()>=1){
-        x3.append(x[x.size()-1]);
-        y3.append(y[y.size()-1]);
-    }
-    plot->graph(2)->setData(x3,y3);
+    set_recent_points(plot,x,y);
 
     if(dt){
         set_range_from(plot,x,y);
@@ -990,6 +1008,7 @@ void MainWindow::plot_data(QCustomPlot *plot,int n,int beg,int end)
     set_info_text(plot,n,best,legendFont);
     plot->graph(1)->setVisible(false);
     plot->graph(2)->setVisible(false);
+    hide_recent_points(plot);
 
     plot->replot();
 
