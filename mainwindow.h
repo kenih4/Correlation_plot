@@ -41,10 +41,14 @@ private slots:
     void on_pushButton_3_clicked();
     void on_checkBox_gradient_toggled(bool checked);
     void on_checkBox_stats_toggled(bool checked);
+    void on_checkBox_detrend_toggled(bool checked);
 
 private:
     void set_scatter_data(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y);
     void apply_gradient(QCustomPlot *plot);
+    void refresh_plots();
+    void detrend_xy(QVector<double> &x,QVector<double> &y);
+    void set_range_from(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y);
     QString update_binned_curve(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y);
     void set_info_text(QCustomPlot *plot,int n,const QString &best,const QFont &font);
     struct BinnedItems{

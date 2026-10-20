@@ -356,6 +356,16 @@
               </property>
              </widget>
             </item>
+            <item>
+             <widget class="QCheckBox" name="checkBox_detrend">
+              <property name="toolTip">
+               <string>Remove slow drift (subtract moving average) before computing correlation</string>
+              </property>
+              <property name="text">
+               <string>Detrend</string>
+              </property>
+             </widget>
+            </item>
            </layout>
           </item>
           <item>

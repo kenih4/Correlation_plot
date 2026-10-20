@@ -64,6 +64,7 @@ MainWindow::MainWindow(QWidget *parent)
     timer->start();
     corrdata = new Corr_data(ui->spinBox->value(),ui->checkBox_calc->checkState());
     corrdata->set_stats(ui->checkBox_stats->isChecked());
+    corrdata->set_detrend(ui->checkBox_detrend->isChecked());
     createActions();
     createStatusBar();
     ui->radioButton->setChecked(true);
@@ -190,6 +191,7 @@ void MainWindow::on_pushButton_clicked()
     delete corrdata;
     corrdata = new Corr_data(ui->spinBox->value(),ui->checkBox_calc->checkState());
     corrdata->set_stats(ui->checkBox_stats->isChecked());
+    corrdata->set_detrend(ui->checkBox_detrend->isChecked());
 
     for(int i= 0;i<ui->listWidget->count();++i){
         corrdata->add_signal(ui->listWidget->item(i)->text().toStdString().c_str());
@@ -328,11 +330,12 @@ QString MainWindow::update_binned_curve(QCustomPlot *plot,const QVector<double> 
 
     // MIC の計算と同じ条件(Threshold オンなら基準信号が閾値を超えたショットだけ)
     bool useTh = ui->checkBox_th->checkState()==Qt::Checked;
+    bool detrended = ui->checkBox_detrend->isChecked();   // 表示データは閾値で絞り込み済み
     double th = ui->V_threshold->text().toDouble();
     QVector<QPair<double,double>> pts;
     for(int i=0;i<x.size() && i<y.size();i++){
         if(!std::isfinite(x[i]) || !std::isfinite(y[i]))continue;
-        if(useTh && !(y[i]>th))continue;
+        if(useTh && !detrended && !(y[i]>th))continue;
         pts.append(qMakePair(x[i],y[i]));
     }
     std::sort(pts.begin(),pts.end());
@@ -451,10 +454,9 @@ void MainWindow::apply_gradient(QCustomPlot *plot)
     }
 }
 
-// Stats の切り替え時は、保持しているデータからMIC等を計算し直して描き直す(DBは読まない)
-void MainWindow::on_checkBox_stats_toggled(bool checked)
+// 保持しているデータからMIC等を計算し直して6枚の散布図を描き直す(DBは読まない)
+void MainWindow::refresh_plots()
 {
-    corrdata->set_stats(checked);
     if(corrdata->sig_size()<2 || corrdata->data_size()<2)return;
     if(ui->checkBox_th->checkState()==Qt::Checked){
         corrdata->calc_mic(ui->V_threshold->text().toDouble());
@@ -468,6 +470,58 @@ void MainWindow::on_checkBox_stats_toggled(bool checked)
     plot_data(ui->widget_7,corrdata->get_ranking(4,b));
     plot_data(ui->widget_8,corrdata->get_ranking(5,b));
     plot_data(ui->widget_9,corrdata->get_ranking(6,b));
+}
+
+void MainWindow::on_checkBox_stats_toggled(bool checked)
+{
+    corrdata->set_stats(checked);
+    refresh_plots();
+}
+
+void MainWindow::on_checkBox_detrend_toggled(bool checked)
+{
+    corrdata->set_detrend(checked);
+    refresh_plots();
+}
+
+// Detrend オンのときの表示用データ。MICの計算と同じ手順(閾値を超えたショットだけを残し、移動平均を引く)にする
+void MainWindow::detrend_xy(QVector<double> &x,QVector<double> &y)
+{
+    bool useTh = ui->checkBox_th->checkState()==Qt::Checked;
+    double th = ui->V_threshold->text().toDouble();
+    QVector<double> xs,ys;
+    for(int i=0;i<x.size() && i<y.size();i++){
+        if(useTh && !(y[i]>th))continue;
+        xs.append(x[i]);
+        ys.append(y[i]);
+    }
+    if(!xs.isEmpty()){
+        Corr_data::detrend(xs.data(),xs.size());
+        Corr_data::detrend(ys.data(),ys.size());
+    }
+    x = xs;
+    y = ys;
+}
+
+// 従来の get_min/get_max(0.5) と同じ余白で、x,y の範囲から軸範囲を決める
+void MainWindow::set_range_from(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y)
+{
+    auto range = [](const QVector<double> &v,double &lo,double &hi)->bool{
+        bool ok = false;
+        for(int i=0;i<v.size();i++){
+            if(!std::isfinite(v[i]))continue;
+            if(!ok){lo = hi = v[i];ok = true;}
+            else{lo = std::min(lo,v[i]);hi = std::max(hi,v[i]);}
+        }
+        if(ok){
+            double d = (hi-lo)*0.5;
+            lo -= d;hi += d;
+        }
+        return ok;
+    };
+    double lo,hi;
+    if(range(x,lo,hi) && hi>lo)plot->xAxis->setRange(lo,hi);
+    if(range(y,lo,hi) && hi>lo)plot->yAxis->setRange(lo,hi);
 }
 
 void MainWindow::on_checkBox_gradient_toggled(bool)
@@ -488,20 +542,28 @@ void MainWindow::plot_data(QCustomPlot *plot,int n)
         x[i] = corrdata->value(corrdata->sig_name(n),i);
         y[i] = corrdata->value(corrdata->sig_name(0),i);
     }
+    bool dt = ui->checkBox_detrend->isChecked();
+    if(dt)detrend_xy(x,y);
     set_scatter_data(plot,x,y);
     QString best = update_binned_curve(plot,x,y);
 
-    QVector<double> x2(1),y2(1);
-    x2[0] = x[corrdata->data_size()-2];
-    y2[0] = y[corrdata->data_size()-2];
+    QVector<double> x2,y2;
+    if(x.size()>=2){
+        x2.append(x[x.size()-2]);
+        y2.append(y[y.size()-2]);
+    }
     plot->graph(1)->setData(x2,y2);
 
-    QVector<double> x3(1),y3(1);
-    x3[0] = x[corrdata->data_size()-1];
-    y3[0] = y[corrdata->data_size()-1];
+    QVector<double> x3,y3;
+    if(x.size()>=1){
+        x3.append(x[x.size()-1]);
+        y3.append(y[y.size()-1]);
+    }
     plot->graph(2)->setData(x3,y3);
 
-    if(ui->checkBox_th->checkState()==Qt::Checked){
+    if(dt){
+        set_range_from(plot,x,y);
+    }else if(ui->checkBox_th->checkState()==Qt::Checked){
         plot->xAxis->setRange(corrdata->get_min(n,0.5,0,ui->V_threshold->text().toDouble()),corrdata->get_max(n,0.5,0,ui->V_threshold->text().toDouble()));
         plot->yAxis->setRange(corrdata->get_min(0,0.5,0,ui->V_threshold->text().toDouble()),corrdata->get_max(0,0.5,0,ui->V_threshold->text().toDouble()));
     }else{
@@ -513,6 +575,10 @@ void MainWindow::plot_data(QCustomPlot *plot,int n)
     plot->yAxis->setLabel(tr(corrdata->sig_name(0).c_str()));
     if(ui->checkBox_calc->checkState()==Qt::Checked){
         plot->yAxis->setLabel("calc efficiency");
+    }
+    if(dt){
+        plot->xAxis->setLabel(plot->xAxis->label()+" (detrended)");
+        plot->yAxis->setLabel(plot->yAxis->label()+" (detrended)");
     }
     plot->axisRect()->insetLayout()->setInsetAlignment(0,Qt::AlignTop|Qt::AlignRight);
     plot->setInteractions(QCP::iRangeDrag|QCP::iRangeZoom);
@@ -803,10 +869,14 @@ void MainWindow::plot_data(QCustomPlot *plot,int n,int beg,int end)
             m++;
         }
     }
+    bool dt = ui->checkBox_detrend->isChecked();
+    if(dt)detrend_xy(x,y);
     set_scatter_data(plot,x,y);
     QString best = update_binned_curve(plot,x,y);
 
-    if(ui->checkBox_th->checkState()==Qt::Checked){
+    if(dt){
+        set_range_from(plot,x,y);
+    }else if(ui->checkBox_th->checkState()==Qt::Checked){
         plot->xAxis->setRange(corrdata->get_min(n,0.5,0,ui->V_threshold->text().toDouble()),corrdata->get_max(n,0.5,0,ui->V_threshold->text().toDouble()));
         plot->yAxis->setRange(corrdata->get_min(0,0.5,0,ui->V_threshold->text().toDouble()),corrdata->get_max(0,0.5,0,ui->V_threshold->text().toDouble()));
     }else{
@@ -818,6 +888,10 @@ void MainWindow::plot_data(QCustomPlot *plot,int n,int beg,int end)
     plot->yAxis->setLabel(tr(corrdata->sig_name(0).c_str()));
     if(ui->checkBox_calc->checkState()==Qt::Checked){
         plot->yAxis->setLabel("calc efficiency");
+    }
+    if(dt){
+        plot->xAxis->setLabel(plot->xAxis->label()+" (detrended)");
+        plot->yAxis->setLabel(plot->yAxis->label()+" (detrended)");
     }
     plot->axisRect()->insetLayout()->setInsetAlignment(0,Qt::AlignTop|Qt::AlignRight);
     plot->setInteractions(QCP::iRangeDrag|QCP::iRangeZoom);

@@ -196,6 +196,24 @@ void Corr_data::db_get_sync_data()
 
 #include <random>
 
+// 時間順に並んだ v から移動平均(中心、端は窓を狭める)を引いて、ゆっくりしたドリフトを除く
+void Corr_data::detrend(double *v,int n)
+{
+    if(n<6)return;
+    int w = n/10;
+    if(w<5)w = 5;
+    if(w>25)w = 25;
+    int h = w/2;
+    vector<double> ps(n+1,0.0);
+    for(int i=0;i<n;i++)ps[i+1] = ps[i]+v[i];
+    vector<double> out(n);
+    for(int i=0;i<n;i++){
+        int lo = max(0,i-h), hi = min(n-1,i+h);
+        out[i] = v[i]-(ps[hi+1]-ps[lo])/(hi-lo+1);
+    }
+    for(int i=0;i<n;i++)v[i] = out[i];
+}
+
 // データ数に応じたMINEのalpha(従来のcalc_micと同じ値)
 double Corr_data::mic_alpha(int n)
 {
@@ -309,6 +327,10 @@ void Corr_data::calc_mic()
             x[j] = value(sig[0].name,j);
             y[j] = value(sig[i].name,j);
         }
+        if(detrend_flg){
+            detrend(x,n);
+            detrend(y,n);
+        }
         mine->compute_score(x,y,n);
         sig[i].coefficient = mine->mic();
         calc_stats(i,x,y,n);
@@ -351,6 +373,10 @@ void Corr_data::calc_mic(double th)
         }
 
 
+        if(detrend_flg){
+            detrend(x,n);
+            detrend(y,n);
+        }
         mine->compute_score(x,y,n);
         sig[i].coefficient = mine->mic();
         calc_stats(i,x,y,n);
@@ -396,6 +422,10 @@ void Corr_data::calc_mic(int beg,int end)
         }
 
 
+        if(detrend_flg){
+            detrend(x,n);
+            detrend(y,n);
+        }
         mine->compute_score(x,y,n);
         sig[i].coefficient = mine->mic();
         calc_stats(i,x,y,n);
