@@ -53,7 +53,9 @@ MainWindow::MainWindow(QWidget *parent)
     ui->listWidget_2->item(0)->setFont(lFont);
 
     create_tree();
-    ui->V_threshold->setText(QString::number(0));
+    ui->V_threshold->setText(QString::number(50));
+    ui->checkBox_th->setChecked(true);
+    ui->checkBox->setChecked(true);     // Auto reload
     timer = new QTimer(this);
     timer->setInterval(10000);
     connect(timer, SIGNAL(timeout()), this, SLOT(update_data()));
@@ -89,7 +91,8 @@ MainWindow::MainWindow(QWidget *parent)
     tracer->setVisible(false);
     tracerText->setVisible(false);
 
-
+    // 起動時に Get ボタンを押す(ウィンドウ表示後にDB取得を始めるため、イベントループに載せる)
+    QTimer::singleShot(0, ui->pushButton, SLOT(click()));
 }
 
 QString MainWindow::signal_list_file(const QString &name)
