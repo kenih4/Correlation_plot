@@ -19,6 +19,7 @@ DEFINES += QT_DEPRECATED_WARNINGS
 SOURCES += \
     corr_data.cpp \
     cppmine.cpp \
+    forest.cpp \
     main.cpp \
     mainwindow.cpp \
     mine.c \
@@ -27,6 +28,7 @@ SOURCES += \
 HEADERS += \
     corr_data.h \
     cppmine.h \
+    forest.h \
     mainwindow.h \
     mine.h \
     qcustomplot.h

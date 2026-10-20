@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <cmath>
 #include "cppmine.h"
+#include "forest.h"
 
 using namespace std;
 
@@ -35,6 +36,13 @@ typedef struct Signal_param{
         return name == other.name;
     }
 }Signal_param;
+
+typedef struct Importance{
+    string name;
+    double importance;  // permutation importance (yの分散に対する割合)
+    double rho;         // 基準信号とのSpearman順位相関(向きの目安)
+    double mic;         // 基準信号とのMIC
+}Importance;
 
 class Corr_data
 {
@@ -96,6 +104,9 @@ public:
     void set_stats(bool f){stats_flg = f;};
     void set_detrend(bool f){detrend_flg = f;};
     static void detrend(double *v,int n);
+    // 基準信号 sig[0] を目的変数、他の全信号を説明変数としてランダムフォレストの重要度を求める。
+    // 相関と同じ条件(Threshold、Detrend)でショットを選ぶ。成功したら true。
+    bool calc_importance(bool use_th,double th,vector<Importance> &out,double &oob_r2,int &nrows);
     void set_flg(int f){dflg = f;cerr<<dflg<<endl;};
     void outfile(string);
 private:

@@ -311,6 +311,63 @@ void Corr_data::calc_stats(int i,double *x,double *y,int n)
     sig[i].mic_null = mic_null95(n);
 }
 
+bool Corr_data::calc_importance(bool use_th,double th,vector<Importance> &out,double &oob_r2,int &nrows)
+{
+    out.clear();
+    oob_r2 = 0;
+    nrows = 0;
+    int p = (int)sig.size() - 1;
+    if(p < 1 || size < 2)return false;
+
+    // 使うショット: Threshold オンなら基準信号が閾値を超えたもの。値が有限でないものは除く
+    vector<int> rows;
+    for(int i=0;i<size;i++){
+        double y0 = value(sig[0].name,i);
+        if(!std::isfinite(y0))continue;
+        if(use_th && !(y0>th))continue;
+        bool ok = true;
+        for(int j=1;j<=p && ok;j++)ok = std::isfinite(value(sig[j].name,i));
+        if(ok)rows.push_back(i);
+    }
+    int n = (int)rows.size();
+    nrows = n;
+    if(n < 20)return false;
+
+    vector<double> y(n);
+    vector<vector<double> > X(p,vector<double>(n));
+    for(int k=0;k<n;k++){
+        y[k] = value(sig[0].name,rows[k]);
+        for(int j=0;j<p;j++)X[j][k] = value(sig[j+1].name,rows[k]);
+    }
+    if(detrend_flg){
+        detrend(y.data(),n);
+        for(int j=0;j<p;j++)detrend(X[j].data(),n);
+    }
+
+    ForestResult r = forest_importance(X,y);
+    oob_r2 = r.oob_r2;
+
+    vector<double> ry = rank_avg(y.data(),n);
+    double mean = (n+1)/2.0;
+    for(int j=0;j<p;j++){
+        Importance im;
+        im.name = sig[j+1].name;
+        im.importance = r.importance[j];
+        im.mic = sig[j+1].coefficient;
+        vector<double> rx = rank_avg(X[j].data(),n);
+        double sx=0,sy=0,sxy=0;
+        for(int k=0;k<n;k++){
+            sx  += (rx[k]-mean)*(rx[k]-mean);
+            sy  += (ry[k]-mean)*(ry[k]-mean);
+            sxy += (rx[k]-mean)*(ry[k]-mean);
+        }
+        im.rho = (sx>0 && sy>0) ? sxy/sqrt(sx*sy) : 0;
+        out.push_back(im);
+    }
+    sort(out.begin(),out.end(),[](const Importance &a,const Importance &b){return a.importance>b.importance;});
+    return true;
+}
+
 void Corr_data::calc_mic()
 {
     MINE *mine;
@@ -793,12 +850,15 @@ void Corr_data::add_db_get_sync_data()
     }
 }
 #include <QFile>
+#include <QDir>
+#include <QFileInfo>
 #include <QTextStream>
 #include <QDebug>
 #include <regex>
 
 void Corr_data::outfile(string fname)
 {
+    QDir().mkpath(QFileInfo(fname.c_str()).absolutePath());     // 保存先ディレクトリが無ければ作る
     QFile fp(fname.c_str());
     if(fp.open(QIODevice::WriteOnly)){
         QTextStream out(&fp);

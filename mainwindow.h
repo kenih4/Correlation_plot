@@ -42,6 +42,7 @@ private slots:
     void on_checkBox_gradient_toggled(bool checked);
     void on_checkBox_stats_toggled(bool checked);
     void on_checkBox_detrend_toggled(bool checked);
+    void on_pushButton_importance_clicked();
 
 private:
     void set_scatter_data(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y);

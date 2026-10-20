@@ -7,6 +7,15 @@
 #include <QFileInfo>
 #include <QTextStream>
 #include <QDebug>
+#include <QDialog>
+#include <QTableWidget>
+#include <QHeaderView>
+#include <QVBoxLayout>
+#include <QLabel>
+#include <QMessageBox>
+
+// 自動更新ごとに書き出すCSV
+static const char *CSV_FILE = "/home_2023/xfel/xfelopr/users/kenichi/dvlp/corr_data/corr.csv";
 #include <cmath>
 #include <algorithm>
 
@@ -233,7 +242,7 @@ void MainWindow::on_pushButton_clicked()
     plot_data(ui->widget_8,corrdata->get_ranking(5));
     plot_data(ui->widget_9,corrdata->get_ranking(6));
     plot_trend(ui->widget);
-    corrdata->outfile("/home/xfel/xfelopr/users/ytajiri/data/corr.csv");
+    corrdata->outfile(CSV_FILE);
 
 }
 void MainWindow::plot_init(QCustomPlot *plot)
@@ -484,6 +493,88 @@ void MainWindow::on_checkBox_detrend_toggled(bool checked)
     refresh_plots();
 }
 
+// 全信号を同時に使ったランダムフォレストの重要度を表にして出す。
+// 1信号ずつのMIC/rhoと違い、似た信号の重複や他の信号の影響を踏まえた順位になる。
+void MainWindow::on_pushButton_importance_clicked()
+{
+    if(corrdata->sig_size()<3 || corrdata->data_size()<2){
+        QMessageBox::information(this,"Importance","Get/Plot でデータを取得し、信号を3つ以上(基準信号+2つ以上)にしてください。");
+        return;
+    }
+    bool useTh = ui->checkBox_th->checkState()==Qt::Checked;
+    corrdata->set_detrend(ui->checkBox_detrend->isChecked());
+    // 表のMICは現在の条件で計算し直したものにする
+    if(useTh){
+        corrdata->calc_mic(ui->V_threshold->text().toDouble());
+    }else{
+        corrdata->calc_mic();
+    }
+
+    vector<Importance> imp;
+    double r2 = 0;
+    int nrows = 0;
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    bool ok = corrdata->calc_importance(useTh,ui->V_threshold->text().toDouble(),imp,r2,nrows);
+    QApplication::restoreOverrideCursor();
+    if(!ok){
+        QMessageBox::information(this,"Importance",
+            QString("計算に使えるショットが足りません(%1件。20件以上必要です)。").arg(nrows));
+        return;
+    }
+
+    QDialog *dlg = new QDialog(this);
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+    dlg->setWindowTitle("Importance (random forest)");
+    dlg->resize(760,420);
+    QVBoxLayout *lay = new QVBoxLayout(dlg);
+
+    QString head = QString("Target : %1%2\nShots : %3    OOB R2 : %4")
+            .arg(QString::fromStdString(corrdata->sig_name(0)))
+            .arg(ui->checkBox_detrend->isChecked() ? " (detrended)" : "")
+            .arg(nrows).arg(r2,0,'f',3);
+    QLabel *label = new QLabel(head,dlg);
+    lay->addWidget(label);
+    if(r2<=0.05){
+        QLabel *warn = new QLabel("OOB R2 が小さく、全信号を使っても基準信号を予測できていません。重要度は信用できません。",dlg);
+        warn->setStyleSheet("color: #c00000;");
+        warn->setWordWrap(true);
+        lay->addWidget(warn);
+    }
+
+    QTableWidget *table = new QTableWidget((int)imp.size(),5,dlg);
+    table->setHorizontalHeaderLabels(QStringList() << "Rank" << "Signal" << "Importance [%]" << "rho" << "MIC");
+    table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    table->setSelectionBehavior(QAbstractItemView::SelectRows);
+    table->verticalHeader()->setVisible(false);
+    for(int i=0;i<(int)imp.size();i++){
+        auto num = [](double v)->QTableWidgetItem*{
+            QTableWidgetItem *it = new QTableWidgetItem;
+            it->setData(Qt::DisplayRole,QString::number(v,'f',2).toDouble());
+            return it;
+        };
+        QTableWidgetItem *rank = new QTableWidgetItem;
+        rank->setData(Qt::DisplayRole,i+1);
+        table->setItem(i,0,rank);
+        table->setItem(i,1,new QTableWidgetItem(QString::fromStdString(imp[i].name)));
+        table->setItem(i,2,num(imp[i].importance*100));
+        table->setItem(i,3,num(imp[i].rho));
+        QTableWidgetItem *mic = new QTableWidgetItem;
+        mic->setData(Qt::DisplayRole,QString::number(imp[i].mic,'f',3).toDouble());
+        table->setItem(i,4,mic);
+    }
+    table->resizeColumnsToContents();
+    table->horizontalHeader()->setStretchLastSection(true);
+    table->setSortingEnabled(true);
+    lay->addWidget(table);
+
+    QLabel *note = new QLabel("Importance: その信号の値をシャッフルしたときに、OOB予測誤差が基準信号の分散の何%増えるか。"
+                              "似た信号があると重要度は分け合うため、1つずつ見た相関より小さく出ることがある。"
+                              "rho は向きの目安(+: 増やすと基準信号が増える傾向)。",dlg);
+    note->setWordWrap(true);
+    lay->addWidget(note);
+    dlg->show();
+}
+
 // Detrend オンのときの表示用データ。MICの計算と同じ手順(閾値を超えたショットだけを残し、移動平均を引く)にする
 void MainWindow::detrend_xy(QVector<double> &x,QVector<double> &y)
 {
@@ -730,7 +821,7 @@ void MainWindow::update_data()
     plot_data(ui->widget_9,corrdata->get_ranking(6,b));
     plot_trend(ui->widget);
     if(cnt>0)
-        corrdata->outfile("/home/xfel/xfelopr/users/ytajiri/data/corr.csv");
+        corrdata->outfile(CSV_FILE);
 
 
 }
