@@ -74,6 +74,7 @@ MainWindow::MainWindow(QWidget *parent)
     corrdata = new Corr_data(ui->spinBox->value(),ui->checkBox_calc->checkState());
     corrdata->set_stats(ui->checkBox_stats->isChecked());
     corrdata->set_detrend(ui->checkBox_detrend->isChecked());
+    corrdata->set_rank_importance(ui->checkBox_importance->isChecked());
     createActions();
     createStatusBar();
     ui->radioButton->setChecked(true);
@@ -201,6 +202,7 @@ void MainWindow::on_pushButton_clicked()
     corrdata = new Corr_data(ui->spinBox->value(),ui->checkBox_calc->checkState());
     corrdata->set_stats(ui->checkBox_stats->isChecked());
     corrdata->set_detrend(ui->checkBox_detrend->isChecked());
+    corrdata->set_rank_importance(ui->checkBox_importance->isChecked());
 
     for(int i= 0;i<ui->listWidget->count();++i){
         corrdata->add_signal(ui->listWidget->item(i)->text().toStdString().c_str());
@@ -229,6 +231,7 @@ void MainWindow::on_pushButton_clicked()
     }else{
         corrdata->calc_mic();
     }
+    corrdata->update_importance(ui->checkBox_th->checkState()==Qt::Checked,ui->V_threshold->text().toDouble());
     for(int j=0;j<corrdata->sig_size();j++){
         cerr<<" "<<j<<"  "<<
               corrdata->sig_name(j)<<"  "<<
@@ -382,8 +385,13 @@ void MainWindow::set_info_text(QCustomPlot *plot,int n,const QString &best,const
     }
     double mic = corrdata->mic(n);
     b.text->setFont(font);
+    // 重要度順のときは重要度[%]を併記する
+    QString impLine;
+    if(corrdata->rank_importance()){
+        impLine = QString("\nimp : %1 %").arg(corrdata->importance(n)*100,0,'f',1);
+    }
     if(!ui->checkBox_stats->isChecked()){
-        b.text->setText(QString("mic : %1").arg(mic,0,'f',3));
+        b.text->setText(QString("mic : %1").arg(mic,0,'f',3) + impLine);
         b.text->setColor(Qt::black);
         return;
     }
@@ -391,6 +399,7 @@ void MainWindow::set_info_text(QCustomPlot *plot,int n,const QString &best,const
     QString s = QString("mic : %1  (null95 %2)\nrho : %3  p : %4")
             .arg(mic,0,'f',3).arg(nul,0,'f',3)
             .arg(corrdata->rho(n),0,'f',2).arg(corrdata->pval(n),0,'f',3);
+    s += impLine;
     if(!best.isEmpty())s += "\n" + best;
     b.text->setText(s);
     // 偶然の範囲を超えていれば赤字
@@ -502,6 +511,7 @@ void MainWindow::refresh_plots()
     }else{
         corrdata->calc_mic();
     }
+    corrdata->update_importance(ui->checkBox_th->checkState()==Qt::Checked,ui->V_threshold->text().toDouble());
     bool b = ui->checkBox_fix->checkState()!=Qt::Checked;
     plot_data(ui->widget_1,corrdata->get_ranking(1,b));
     plot_data(ui->widget_2,corrdata->get_ranking(2,b));
@@ -514,6 +524,13 @@ void MainWindow::refresh_plots()
 void MainWindow::on_checkBox_stats_toggled(bool checked)
 {
     corrdata->set_stats(checked);
+    refresh_plots();
+}
+
+void MainWindow::on_checkBox_importance_toggled(bool checked)
+{
+    corrdata->set_rank_importance(checked);
+    corrdata->rank_init();      // Fix で保持している順位も作り直す
     refresh_plots();
 }
 
@@ -820,6 +837,7 @@ void MainWindow::update_data()
     }else{
         corrdata->calc_mic();
     }
+    corrdata->update_importance(ui->checkBox_th->checkState()==Qt::Checked,ui->V_threshold->text().toDouble());
     if(cnt>0)
         for(int j=0;j<corrdata->sig_size();j++){
             cerr<<" "<<j<<"  "<<
@@ -938,6 +956,7 @@ void MainWindow::on_pushButton_3_clicked()
     }
     cerr<<beg<<"   "<<end<<endl;
     corrdata->calc_mic(beg,end);
+    corrdata->update_importance(false,0,beg,end);
     cerr<<beg<<"   "<<end<<endl;
 
     plot_data(ui->widget_1,corrdata->get_ranking(1),beg,end);

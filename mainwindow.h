@@ -43,6 +43,7 @@ private slots:
     void on_checkBox_stats_toggled(bool checked);
     void on_checkBox_detrend_toggled(bool checked);
     void on_pushButton_importance_clicked();
+    void on_checkBox_importance_toggled(bool checked);
 
 private:
     void set_scatter_data(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y);

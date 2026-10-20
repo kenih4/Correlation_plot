@@ -32,6 +32,7 @@ typedef struct Signal_param{
     double rho;         // Spearman順位相関係数(基準信号との間。符号付き)
     double pval;        // rho の並べ替え検定のp値
     double mic_null;    // 無相関のときのMICの95パーセンタイル(同じデータ数)
+    double importance;  // ランダムフォレストの重要度(基準信号は最大値)。重要度順の表示のときだけ計算する
     bool operator==(const Signal_param &other) const {
         return name == other.name;
     }
@@ -52,13 +53,13 @@ public:
     void get_tag(string endtime);
     void get_tag(string begtime,string endtime);
     void add_signal(string signal){
-        Signal_param s = {signal,0,0,1,0};
+        Signal_param s = {signal,0,0,1,0,0};
         if(find(sig.begin(),sig.end(),s)==sig.end()){
             sig.push_back(s);
         }
     };
     void add_signal_d(string signal){
-        Signal_param s = {signal,0,0,1,0};
+        Signal_param s = {signal,0,0,1,0,0};
         if(find(sig_d.begin(),sig_d.end(),s)==sig_d.end()){
             sig_d.push_back(s);
         }
@@ -106,7 +107,12 @@ public:
     static void detrend(double *v,int n);
     // 基準信号 sig[0] を目的変数、他の全信号を説明変数としてランダムフォレストの重要度を求める。
     // 相関と同じ条件(Threshold、Detrend)でショットを選ぶ。成功したら true。
-    bool calc_importance(bool use_th,double th,vector<Importance> &out,double &oob_r2,int &nrows);
+    bool calc_importance(bool use_th,double th,vector<Importance> &out,double &oob_r2,int &nrows,int beg=-1,int end=-1);
+    // 散布図を重要度順に並べるか。オンのとき update_importance() で各信号の重要度を更新する
+    void set_rank_importance(bool f){rank_imp = f;imp_valid = false;};
+    bool rank_importance(){return rank_imp && imp_valid;};
+    void update_importance(bool use_th,double th,int beg=-1,int end=-1);
+    double importance(int n){return sig[n].importance;};
     void set_flg(int f){dflg = f;cerr<<dflg<<endl;};
     void outfile(string);
 private:
@@ -119,6 +125,9 @@ private:
     vector<Data> data;
     vector<int> rank;
     int dflg;
+    bool rank_imp = false;      // 順位を重要度で決めるか
+    bool imp_valid = false;     // 重要度が計算できているか(データ不足のときはMIC順に戻す)
+    double score(int i){return (rank_imp && imp_valid) ? sig[i].importance : sig[i].coefficient;}
     bool detrend_flg = false;   // 相関を取る前に移動平均を引いてゆっくりした変動を除くか
     bool stats_flg = false;    // rho / p値 / MICの無相関95%点を計算するか
 };

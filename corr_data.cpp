@@ -311,7 +311,7 @@ void Corr_data::calc_stats(int i,double *x,double *y,int n)
     sig[i].mic_null = mic_null95(n);
 }
 
-bool Corr_data::calc_importance(bool use_th,double th,vector<Importance> &out,double &oob_r2,int &nrows)
+bool Corr_data::calc_importance(bool use_th,double th,vector<Importance> &out,double &oob_r2,int &nrows,int beg,int end)
 {
     out.clear();
     oob_r2 = 0;
@@ -321,7 +321,16 @@ bool Corr_data::calc_importance(bool use_th,double th,vector<Importance> &out,do
 
     // 使うショット: Threshold オンなら基準信号が閾値を超えたもの。値が有限でないものは除く
     vector<int> rows;
+    bool useRange = end > beg;     // 時間範囲(calc_mic(beg,end)と同じ条件: 区間の端は含まない)
+    struct tm tmv;
     for(int i=0;i<size;i++){
+        if(useRange){
+            memset(&tmv,0,sizeof(tmv));
+            tmv.tm_isdst = -1;
+            if(strptime(endtime(i).c_str(),"%Y/%m/%d %H:%M:%S",&tmv)==NULL)continue;
+            time_t t = mktime(&tmv);
+            if(!(beg < t && t < end))continue;
+        }
         double y0 = value(sig[0].name,i);
         if(!std::isfinite(y0))continue;
         if(use_th && !(y0>th))continue;
@@ -366,6 +375,24 @@ bool Corr_data::calc_importance(bool use_th,double th,vector<Importance> &out,do
     }
     sort(out.begin(),out.end(),[](const Importance &a,const Importance &b){return a.importance>b.importance;});
     return true;
+}
+
+void Corr_data::update_importance(bool use_th,double th,int beg,int end)
+{
+    imp_valid = false;
+    if(!rank_imp)return;
+    vector<Importance> imp;
+    double r2 = 0;
+    int nrows = 0;
+    for(size_t i=0;i<sig.size();i++)sig[i].importance = 0;
+    if(!calc_importance(use_th,th,imp,r2,nrows,beg,end))return;   // ショット不足: MIC順のまま
+    for(size_t k=0;k<imp.size();k++){
+        for(size_t i=1;i<sig.size();i++){
+            if(sig[i].name==imp[k].name)sig[i].importance = imp[k].importance;
+        }
+    }
+    sig[0].importance = 1e30;   // 基準信号が常に先頭(0位)になるようにする
+    imp_valid = true;
 }
 
 void Corr_data::calc_mic()
@@ -586,9 +613,9 @@ int Corr_data::get_ranking(int ranking)
     for(int i=0;i<(int)sig.size();i++){
         rank[i] = 0;
         for(int j=0;j<(int)sig.size();j++){
-            if(i!=j && sig[i].coefficient<sig[j].coefficient){
+            if(i!=j && score(i)<score(j)){
                 rank[i]++;
-            }else if(i>j && sig[i].coefficient==sig[j].coefficient){
+            }else if(i>j && score(i)==score(j)){
                 rank[i]++;
             }
         }
