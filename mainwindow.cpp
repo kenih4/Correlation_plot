@@ -443,7 +443,7 @@ void MainWindow::create_tree()
     ui->treeWidget->setColumnCount(1);
     ui->treeWidget->setHeaderLabel(tr("Signal"));
     QList<QTreeWidgetItem*> items;
-    QStringList list = {"sr_safety_topup","sr_mon_xsbt","sr_mon_img","xfel_mon_bpm","xfel_mon_xsbt","xfel_mon_msbpm","xfel_mon_csr","xfel_mon_blm"};
+    QStringList list = {"sr_safety_topup","sr_mon_xsbt","sr_mon_img","xfel_mon_bpm","xfel_mon_xsbt","xfel_mon_msbpm","xfel_mon_csr","xfel_mon_blm","xfel_llrf"};
     Db_sig_inf *get_inf;
     int get_inf_cnt;
 
