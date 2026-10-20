@@ -28,6 +28,9 @@ typedef struct Data{
 typedef struct Signal_param{
     string name;
     double coefficient;
+    double rho;         // Spearman順位相関係数(基準信号との間。符号付き)
+    double pval;        // rho の並べ替え検定のp値
+    double mic_null;    // 無相関のときのMICの95パーセンタイル(同じデータ数)
     bool operator==(const Signal_param &other) const {
         return name == other.name;
     }
@@ -41,13 +44,13 @@ public:
     void get_tag(string endtime);
     void get_tag(string begtime,string endtime);
     void add_signal(string signal){
-        Signal_param s = {signal,0};
+        Signal_param s = {signal,0,0,1,0};
         if(find(sig.begin(),sig.end(),s)==sig.end()){
             sig.push_back(s);
         }
     };
     void add_signal_d(string signal){
-        Signal_param s = {signal,0};
+        Signal_param s = {signal,0,0,1,0};
         if(find(sig_d.begin(),sig_d.end(),s)==sig_d.end()){
             sig_d.push_back(s);
         }
@@ -73,6 +76,9 @@ public:
     void calc_mic(double th);
     void calc_mic(int beg,int end);
     double mic(int n){return sig[n].coefficient;};
+    double rho(int n){return sig[n].rho;};
+    double pval(int n){return sig[n].pval;};
+    double mic_null(int n){return sig[n].mic_null;};
     double get_max(int n);
     double get_min(int n);
     double get_max(int n,double ratio);
@@ -90,6 +96,9 @@ public:
     void set_flg(int f){dflg = f;cerr<<dflg<<endl;};
     void outfile(string);
 private:
+    static double mic_alpha(int n);
+    static double mic_null95(int n);
+    void calc_stats(int i,double *x,double *y,int n);
     int size;
     vector <Signal_param> sig;
     vector <Signal_param> sig_d;

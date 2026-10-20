@@ -194,6 +194,105 @@ void Corr_data::db_get_sync_data()
 
 }
 
+#include <random>
+
+// データ数に応じたMINEのalpha(従来のcalc_micと同じ値)
+double Corr_data::mic_alpha(int n)
+{
+    if(n>=2500)return 0.55;
+    if(n>=1000)return 0.6;
+    if(n>=500)return 0.65;
+    if(n>=250)return 0.7;
+    if(n>=50)return 0.75;
+    if(n>=25)return 0.8;
+    return 0.85;
+}
+
+// 無相関(独立な一様乱数)のときのMICの95パーセンタイル。
+// 値はデータ数だけで決まるので、丸めたデータ数ごとに1度だけ計算してキャッシュする。
+double Corr_data::mic_null95(int n)
+{
+    static map<int,double> cache;
+    int key = n;
+    if(n>=100){
+        int unit = 1;
+        while(n/unit>=100)unit*=10;
+        key = (n/unit)*unit;    // 上位2桁に丸める
+    }
+    if(key<4)return 1.0;
+    auto it = cache.find(key);
+    if(it!=cache.end())return it->second;
+
+    const int R = 60;
+    std::mt19937 gen(12345);
+    std::uniform_real_distribution<double> u(0.0,1.0);
+    vector<double> mics;
+    vector<double> x(key),y(key);
+    for(int r=0;r<R;r++){
+        for(int i=0;i<key;i++){x[i]=u(gen);y[i]=u(gen);}
+        MINE m(mic_alpha(key),15,EST_MIC_APPROX);
+        m.compute_score(x.data(),y.data(),key);
+        mics.push_back(m.mic());
+    }
+    sort(mics.begin(),mics.end());
+    double v = mics[(int)(0.95*(R-1)+0.5)];
+    cache[key] = v;
+    return v;
+}
+
+// 平均順位(同値は平均)
+static vector<double> rank_avg(const double *v,int n)
+{
+    vector<int> idx(n);
+    for(int i=0;i<n;i++)idx[i]=i;
+    sort(idx.begin(),idx.end(),[v](int a,int b){return v[a]<v[b];});
+    vector<double> r(n);
+    int i=0;
+    while(i<n){
+        int j=i;
+        while(j+1<n && v[idx[j+1]]==v[idx[i]])j++;
+        double avg = (i+j)/2.0+1.0;
+        for(int k=i;k<=j;k++)r[idx[k]]=avg;
+        i=j+1;
+    }
+    return r;
+}
+
+// 基準信号(x)と信号(y)のSpearman順位相関と並べ替え検定のp値、MICの無相関95%点を求める
+void Corr_data::calc_stats(int i,double *x,double *y,int n)
+{
+    sig[i].rho = 0;
+    sig[i].pval = 1;
+    sig[i].mic_null = 0;
+    if(n<4)return;
+
+    vector<double> rx = rank_avg(x,n);
+    vector<double> ry = rank_avg(y,n);
+    double mean = (n+1)/2.0;
+    double sx=0,sy=0,sxy=0;
+    for(int k=0;k<n;k++){
+        sx  += (rx[k]-mean)*(rx[k]-mean);
+        sy  += (ry[k]-mean)*(ry[k]-mean);
+        sxy += (rx[k]-mean)*(ry[k]-mean);
+    }
+    if(sx<=0 || sy<=0)return;   // どちらかが一定値
+    double rho = sxy/sqrt(sx*sy);
+    sig[i].rho = rho;
+
+    const int B = 1000;
+    std::mt19937 gen(12345);
+    vector<double> yp(ry);
+    int ge = 0;
+    for(int b=0;b<B;b++){
+        shuffle(yp.begin(),yp.end(),gen);
+        double s = 0;
+        for(int k=0;k<n;k++)s += (rx[k]-mean)*(yp[k]-mean);
+        if(fabs(s/sqrt(sx*sy))>=fabs(rho)-1e-12)ge++;
+    }
+    sig[i].pval = (ge+1.0)/(B+1.0);
+    sig[i].mic_null = mic_null95(n);
+}
+
 void Corr_data::calc_mic()
 {
     MINE *mine;
@@ -204,21 +303,7 @@ void Corr_data::calc_mic()
         n = size;
         x = new double [n];
         y = new double [n];
-        if(n>=2500){
-            alpha = 0.55;
-        }else if(n>=1000){
-            alpha = 0.6;
-        }else if(n>=500){
-            alpha = 0.65;
-        }else if(n>=250){
-            alpha = 0.7;
-        }else if(n>=50){
-            alpha = 0.75;
-        }else if(n>=25){
-            alpha = 0.8;
-        }else{
-            alpha = 0.85;
-        }
+        alpha = mic_alpha(n);
         mine = new MINE(alpha, 15, EST_MIC_APPROX);
         for(int j=0;j<n;j++){
             x[j] = value(sig[0].name,j);
@@ -226,6 +311,7 @@ void Corr_data::calc_mic()
         }
         mine->compute_score(x,y,n);
         sig[i].coefficient = mine->mic();
+        calc_stats(i,x,y,n);
         delete mine;
         delete [] x;
         delete [] y;
@@ -245,25 +331,14 @@ void Corr_data::calc_mic(double th)
     for(int i=0;i<(int)sig.size();i++){
         if(n<2){
             sig[i].coefficient = 0;
+            sig[i].rho = 0;
+            sig[i].pval = 1;
+            sig[i].mic_null = 0;
             continue;
         }
         x = new double [n];
         y = new double [n];
-        if(n>=2500){
-            alpha = 0.55;
-        }else if(n>=1000){
-            alpha = 0.6;
-        }else if(n>=500){
-            alpha = 0.65;
-        }else if(n>=250){
-            alpha = 0.7;
-        }else if(n>=50){
-            alpha = 0.75;
-        }else if(n>=25){
-            alpha = 0.8;
-        }else{
-            alpha = 0.85;
-        }
+        alpha = mic_alpha(n);
         mine = new MINE(alpha, 15, EST_MIC_APPROX);
 
         m = 0;
@@ -278,6 +353,7 @@ void Corr_data::calc_mic(double th)
 
         mine->compute_score(x,y,n);
         sig[i].coefficient = mine->mic();
+        calc_stats(i,x,y,n);
         delete mine;
         delete [] x;
         delete [] y;
@@ -299,25 +375,14 @@ void Corr_data::calc_mic(int beg,int end)
     for(int i=0;i<(int)sig.size();i++){
         if(n<2){
             sig[i].coefficient = 0;
+            sig[i].rho = 0;
+            sig[i].pval = 1;
+            sig[i].mic_null = 0;
             continue;
         }
         x = new double [n];
         y = new double [n];
-        if(n>=2500){
-            alpha = 0.55;
-        }else if(n>=1000){
-            alpha = 0.6;
-        }else if(n>=500){
-            alpha = 0.65;
-        }else if(n>=250){
-            alpha = 0.7;
-        }else if(n>=50){
-            alpha = 0.75;
-        }else if(n>=25){
-            alpha = 0.8;
-        }else{
-            alpha = 0.85;
-        }
+        alpha = mic_alpha(n);
         mine = new MINE(alpha, 15, EST_MIC_APPROX);
 
         m = 0;
@@ -333,6 +398,7 @@ void Corr_data::calc_mic(int beg,int end)
 
         mine->compute_score(x,y,n);
         sig[i].coefficient = mine->mic();
+        calc_stats(i,x,y,n);
         delete mine;
         delete [] x;
         delete [] y;

@@ -7,6 +7,8 @@
 #include <QFileInfo>
 #include <QTextStream>
 #include <QDebug>
+#include <cmath>
+#include <algorithm>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -302,6 +304,82 @@ void MainWindow::plot_trend(QCustomPlot *plot)
 
     plot->replot();
 }
+// x(信号)を等頻度の区間に分け、各区間の y(基準信号)の平均±標準誤差の折れ線を重ねる。
+// 効率が最大になる x の位置を読み取るためのもの。最大の区間を説明する文字列を返す。
+QString MainWindow::update_binned_curve(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y)
+{
+    BinnedItems &b = binned[plot];
+    if(!b.graph){
+        b.graph = plot->addGraph();
+        b.graph->setPen(QPen(Qt::black,2));
+        b.graph->setLineStyle(QCPGraph::lsLine);
+        b.graph->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssDisc,Qt::black,6));
+        b.err = new QCPErrorBars(plot->xAxis,plot->yAxis);
+        b.err->setDataPlottable(b.graph);
+        b.err->setPen(QPen(Qt::black,1.5));
+    }
+
+    // MIC の計算と同じ条件(Threshold オンなら基準信号が閾値を超えたショットだけ)
+    bool useTh = ui->checkBox_th->checkState()==Qt::Checked;
+    double th = ui->V_threshold->text().toDouble();
+    QVector<QPair<double,double>> pts;
+    for(int i=0;i<x.size() && i<y.size();i++){
+        if(!std::isfinite(x[i]) || !std::isfinite(y[i]))continue;
+        if(useTh && !(y[i]>th))continue;
+        pts.append(qMakePair(x[i],y[i]));
+    }
+    std::sort(pts.begin(),pts.end());
+
+    int n = pts.size();
+    int nb = qBound(0,n/10,10);     // 1区間あたり10点以上
+    if(nb<3){
+        b.graph->data()->clear();
+        b.err->data().clear();
+        return QString();
+    }
+    QVector<double> kx,ky,ke;
+    int best = -1;
+    for(int k=0;k<nb;k++){
+        int s = k*n/nb, e = (k+1)*n/nb, cnt = e-s;
+        double mx=0,my=0;
+        for(int i=s;i<e;i++){mx+=pts[i].first;my+=pts[i].second;}
+        mx/=cnt;my/=cnt;
+        double var=0;
+        for(int i=s;i<e;i++)var+=(pts[i].second-my)*(pts[i].second-my);
+        double sem = sqrt(var/(cnt-1))/sqrt((double)cnt);
+        kx.append(mx);ky.append(my);ke.append(sem);
+        if(best<0 || my>ky[best])best = k;
+    }
+    b.graph->setData(kx,ky);
+    b.err->setData(ke);
+    return QString("best x : %1  (mean %2)").arg(kx[best],0,'g',5).arg(ky[best],0,'g',5);
+}
+
+// グラフ右上の説明文(MIC、無相関の95%点、Spearman、p値、最適位置)
+void MainWindow::set_info_text(QCustomPlot *plot,int n,const QString &best,const QFont &font)
+{
+    BinnedItems &b = binned[plot];
+    if(!b.text){
+        b.text = new QCPItemText(plot);
+        b.text->setPositionAlignment(Qt::AlignTop|Qt::AlignHCenter);
+        b.text->position->setType(QCPItemPosition::ptAxisRectRatio);
+        b.text->position->setCoords(0.75, 0);
+        b.text->setPen(QPen(Qt::white));
+        b.text->setBrush(QBrush(QColor(255,255,255,230)));
+    }
+    double mic = corrdata->mic(n);
+    double nul = corrdata->mic_null(n);
+    QString s = QString("mic : %1  (null95 %2)\nrho : %3  p : %4")
+            .arg(mic,0,'f',3).arg(nul,0,'f',3)
+            .arg(corrdata->rho(n),0,'f',2).arg(corrdata->pval(n),0,'f',3);
+    if(!best.isEmpty())s += "\n" + best;
+    b.text->setText(s);
+    b.text->setFont(font);
+    // 偶然の範囲を超えていれば赤字
+    bool significant = mic>nul && corrdata->pval(n)<0.05;
+    b.text->setColor(significant ? QColor(200,0,0) : QColor(60,60,60));
+}
+
 // 散布図のデータを設定する(古い順に並んだ x,y)
 void MainWindow::set_scatter_data(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y)
 {
@@ -378,6 +456,7 @@ void MainWindow::plot_data(QCustomPlot *plot,int n)
         y[i] = corrdata->value(corrdata->sig_name(0),i);
     }
     set_scatter_data(plot,x,y);
+    QString best = update_binned_curve(plot,x,y);
 
     QVector<double> x2(1),y2(1);
     x2[0] = x[corrdata->data_size()-2];
@@ -405,14 +484,7 @@ void MainWindow::plot_data(QCustomPlot *plot,int n)
     plot->axisRect()->insetLayout()->setInsetAlignment(0,Qt::AlignTop|Qt::AlignRight);
     plot->setInteractions(QCP::iRangeDrag|QCP::iRangeZoom);
 
-    QCPItemText *micValue = new QCPItemText(plot);
-    micValue->setPositionAlignment(Qt::AlignTop|Qt::AlignHCenter);
-    micValue->position->setType(QCPItemPosition::ptAxisRectRatio);
-    micValue->position->setCoords(0.8, 0); // place position at center/top of axis rect
-    micValue->setText(QString("mic : %1").arg(corrdata->mic(n),0,'f',3));
-    micValue->setFont(legendFont);
-    micValue->setPen(QPen(Qt::white));
-    micValue->setBrush(QBrush(QColor(255,255,255,230)));
+    set_info_text(plot,n,best,legendFont);
     plot->graph(1)->setVisible(true);
     plot->graph(2)->setVisible(true);
 
@@ -699,6 +771,7 @@ void MainWindow::plot_data(QCustomPlot *plot,int n,int beg,int end)
         }
     }
     set_scatter_data(plot,x,y);
+    QString best = update_binned_curve(plot,x,y);
 
     if(ui->checkBox_th->checkState()==Qt::Checked){
         plot->xAxis->setRange(corrdata->get_min(n,0.5,0,ui->V_threshold->text().toDouble()),corrdata->get_max(n,0.5,0,ui->V_threshold->text().toDouble()));
@@ -716,14 +789,7 @@ void MainWindow::plot_data(QCustomPlot *plot,int n,int beg,int end)
     plot->axisRect()->insetLayout()->setInsetAlignment(0,Qt::AlignTop|Qt::AlignRight);
     plot->setInteractions(QCP::iRangeDrag|QCP::iRangeZoom);
 
-    QCPItemText *micValue = new QCPItemText(plot);
-    micValue->setPositionAlignment(Qt::AlignTop|Qt::AlignHCenter);
-    micValue->position->setType(QCPItemPosition::ptAxisRectRatio);
-    micValue->position->setCoords(0.8, 0); // place position at center/top of axis rect
-    micValue->setText(QString("mic : %1").arg(corrdata->mic(n),0,'f',3));
-    micValue->setFont(legendFont);
-    micValue->setPen(QPen(Qt::white));
-    micValue->setBrush(QBrush(QColor(255,255,255,230)));
+    set_info_text(plot,n,best,legendFont);
     plot->graph(1)->setVisible(false);
     plot->graph(2)->setVisible(false);
 
