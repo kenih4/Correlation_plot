@@ -254,11 +254,11 @@ void MainWindow::plot_init(QCustomPlot *plot)
     plot->addGraph();
     plot->graph(1)->setPen(QPen(QColor("#8000ff")));
     plot->graph(1)->setLineStyle(QCPGraph::lsNone);
-    plot->graph(1)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,"#8000ff", "#8f8000ff", 5));
+    plot->graph(1)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,"#8000ff", "#8f8000ff", 8));
     plot->addGraph();
     plot->graph(2)->setPen(QPen(Qt::blue));
     plot->graph(2)->setLineStyle(QCPGraph::lsNone);
-    plot->graph(2)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle, "#0000ff", "#0000ff", 7));
+    plot->graph(2)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle, "#0000ff", "#0000ff", 10));
 
 }
 void MainWindow::plot_trend(QCustomPlot *plot)
@@ -398,8 +398,8 @@ void MainWindow::set_info_text(QCustomPlot *plot,int n,const QString &best,const
     b.text->setColor(significant ? QColor(200,0,0) : QColor(60,60,60));
 }
 
-// 最新の4点を色分けして重ねる: 最新=大きい青(graph(2))、2番目=小さい紫(graph(1))、
-// 3番目=小さいマゼンタ、4番目=小さいオレンジ。それより古い点は通常の赤(またはグラデーション)
+// 最新の4点を色分けして重ねる: 最新=青(サイズ10, graph(2))、2番目=紫(8, graph(1))、
+// 3番目=マゼンタ(6)、4番目=オレンジ(5)。それより古い点は通常の赤(またはグラデーション)
 void MainWindow::set_recent_points(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y)
 {
     RecentGraphs &r = recent[plot];
@@ -407,7 +407,7 @@ void MainWindow::set_recent_points(QCustomPlot *plot,const QVector<double> &x,co
         r.g3 = plot->addGraph();
         r.g3->setPen(QPen(QColor("#ff00ff")));
         r.g3->setLineStyle(QCPGraph::lsNone);
-        r.g3->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,"#ff00ff","#8fff00ff",5));
+        r.g3->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,"#ff00ff","#8fff00ff",6));
         r.g4 = plot->addGraph();
         r.g4->setPen(QPen(QColor("#ff8000")));
         r.g4->setLineStyle(QCPGraph::lsNone);
