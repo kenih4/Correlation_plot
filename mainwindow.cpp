@@ -274,9 +274,10 @@ void MainWindow::plot_trend(QCustomPlot *plot)
     dateTicker->setDateTimeFormat("HH:mm:ss");
     plot->xAxis->setTicker(dateTicker);
     //    DLOG<<"****  "<<corrdata->sig_name(n)<<"  1****"<<endl;
+    const string &name_y0 = corrdata->sig_name(0);
     for(int i=0;i<corrdata->data_size();i++){
         x[i] = QDateTime::fromString(QString::fromStdString(corrdata->endtime(i)),"yyyy/MM/dd HH:mm:ss.z").toSecsSinceEpoch();
-        y[i] = corrdata->value(corrdata->sig_name(0),i);
+        y[i] = corrdata->value(name_y0,i);
         //        y[i] = corrdata->value(corrdata->sig_name(0),i)/(corrdata->denominator(corrdata->sig_d_name(0),i)*1e-9/(1.60219e-19))*100;
     }
     //    DLOG<<"****  "<<corrdata->sig_name(n)<<"  2****"<<endl;
@@ -286,9 +287,13 @@ void MainWindow::plot_trend(QCustomPlot *plot)
     //    DLOG<<"****  "<<corrdata->sig_name(n)<<"  2****"<<endl;
 
     if(ui->checkBox_th->checkState()==Qt::Checked){
-        plot->yAxis->setRange(corrdata->get_min(0,0.5,0,ui->V_threshold->text().toDouble()),corrdata->get_max(0,0.5,0,ui->V_threshold->text().toDouble()));
+        double lo,hi;
+        corrdata->get_range(0,0.5,0,ui->V_threshold->text().toDouble(),lo,hi);
+        plot->yAxis->setRange(lo,hi);
     }else{
-        plot->yAxis->setRange(corrdata->get_min(0,0.5),corrdata->get_max(0,0.5));
+        double lo,hi;
+        corrdata->get_range(0,0.5,lo,hi);
+        plot->yAxis->setRange(lo,hi);
 
     }
     plot->xAxis->setRange(x[0]-60,x[corrdata->data_size()-1]+60);
@@ -311,7 +316,7 @@ void MainWindow::plot_trend(QCustomPlot *plot)
     tracer->setVisible(false);
     tracerText->setVisible(false);
 
-    plot->replot();
+    plot->replot(QCustomPlot::rpQueuedReplot);
 }
 // x(信号)を等頻度の区間に分け、各区間の y(基準信号)の平均±標準誤差の折れ線を重ねる。
 // 効率が最大になる x の位置を読み取るためのもの。最大の区間を説明する文字列を返す。
@@ -449,7 +454,10 @@ void MainWindow::hide_recent_points(QCustomPlot *plot)
 // 散布図のデータを設定する(古い順に並んだ x,y)
 void MainWindow::set_scatter_data(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y)
 {
-    plot->graph(0)->setData(x,y);
+    // Gradient オンで非表示になる graph(0) には、データを入れない(setData は x での並べ替えが走る)。
+    // トレンド(ui->widget)は tracer が graph(0) のデータを使うので常に入れる。
+    bool skip0 = ui->checkBox_gradient->isChecked() && plot!=ui->widget;
+    if(!skip0)plot->graph(0)->setData(x,y);
     scatter_xy[plot] = qMakePair(x,y);
     apply_gradient(plot);
 }
@@ -695,7 +703,12 @@ void MainWindow::set_range_from(QCustomPlot *plot,const QVector<double> &x,const
 
 void MainWindow::on_checkBox_gradient_toggled(bool)
 {
+    bool on = ui->checkBox_gradient->isChecked();
     for(auto it = scatter_xy.begin(); it != scatter_xy.end(); ++it){
+        if(!on){
+            // オフに戻すとき、入れていなかった graph(0) のデータを入れ直す
+            it.key()->graph(0)->setData(it.value().first,it.value().second);
+        }
         apply_gradient(it.key());
         it.key()->replot();
     }
@@ -707,9 +720,11 @@ void MainWindow::plot_data(QCustomPlot *plot,int n)
     QFont legendFont = font();
     legendFont.setPointSize(9);
 
+    const string &name_x = corrdata->sig_name(n);
+    const string &name_y = corrdata->sig_name(0);
     for(int i=0;i<corrdata->data_size();i++){
-        x[i] = corrdata->value(corrdata->sig_name(n),i);
-        y[i] = corrdata->value(corrdata->sig_name(0),i);
+        x[i] = corrdata->value(name_x,i);
+        y[i] = corrdata->value(name_y,i);
     }
     bool dt = ui->checkBox_detrend->isChecked();
     if(dt)detrend_xy(x,y);
@@ -721,11 +736,17 @@ void MainWindow::plot_data(QCustomPlot *plot,int n)
     if(dt){
         set_range_from(plot,x,y);
     }else if(ui->checkBox_th->checkState()==Qt::Checked){
-        plot->xAxis->setRange(corrdata->get_min(n,0.5,0,ui->V_threshold->text().toDouble()),corrdata->get_max(n,0.5,0,ui->V_threshold->text().toDouble()));
-        plot->yAxis->setRange(corrdata->get_min(0,0.5,0,ui->V_threshold->text().toDouble()),corrdata->get_max(0,0.5,0,ui->V_threshold->text().toDouble()));
+        double th = ui->V_threshold->text().toDouble(),lo,hi;
+        corrdata->get_range(n,0.5,0,th,lo,hi);
+        plot->xAxis->setRange(lo,hi);
+        corrdata->get_range(0,0.5,0,th,lo,hi);
+        plot->yAxis->setRange(lo,hi);
     }else{
-        plot->xAxis->setRange(corrdata->get_min(n,0.5),corrdata->get_max(n,0.5));
-        plot->yAxis->setRange(corrdata->get_min(0,0.5),corrdata->get_max(0,0.5));
+        double lo,hi;
+        corrdata->get_range(n,0.5,lo,hi);
+        plot->xAxis->setRange(lo,hi);
+        corrdata->get_range(0,0.5,lo,hi);
+        plot->yAxis->setRange(lo,hi);
     }
 
     plot->xAxis->setLabel(tr(corrdata->sig_name(n).c_str()));
@@ -744,7 +765,7 @@ void MainWindow::plot_data(QCustomPlot *plot,int n)
     plot->graph(1)->setVisible(true);
     plot->graph(2)->setVisible(true);
 
-    plot->replot();
+    plot->replot(QCustomPlot::rpQueuedReplot);
 
 }
 void MainWindow::on_treeWidget_itemDoubleClicked(QTreeWidgetItem *item, int column)
@@ -1028,11 +1049,13 @@ void MainWindow::plot_data(QCustomPlot *plot,int n,int beg,int end)
     DLOG<<"m = "<<m<<endl;
     QVector<double> x(m),y(m);
     m=0;
+    const string &name_x = corrdata->sig_name(n);
+    const string &name_y = corrdata->sig_name(0);
     for(int i=0;i<corrdata->data_size();i++){
         strptime(corrdata->endtime(i).c_str(),"%Y/%m/%d %H:%M:%S",&buf);
         if(beg < mktime(&buf) && mktime(&buf) < end){
-            x[m] = corrdata->value(corrdata->sig_name(n),i);
-            y[m] = corrdata->value(corrdata->sig_name(0),i);
+            x[m] = corrdata->value(name_x,i);
+            y[m] = corrdata->value(name_y,i);
             m++;
         }
     }
@@ -1044,11 +1067,17 @@ void MainWindow::plot_data(QCustomPlot *plot,int n,int beg,int end)
     if(dt){
         set_range_from(plot,x,y);
     }else if(ui->checkBox_th->checkState()==Qt::Checked){
-        plot->xAxis->setRange(corrdata->get_min(n,0.5,0,ui->V_threshold->text().toDouble()),corrdata->get_max(n,0.5,0,ui->V_threshold->text().toDouble()));
-        plot->yAxis->setRange(corrdata->get_min(0,0.5,0,ui->V_threshold->text().toDouble()),corrdata->get_max(0,0.5,0,ui->V_threshold->text().toDouble()));
+        double th = ui->V_threshold->text().toDouble(),lo,hi;
+        corrdata->get_range(n,0.5,0,th,lo,hi);
+        plot->xAxis->setRange(lo,hi);
+        corrdata->get_range(0,0.5,0,th,lo,hi);
+        plot->yAxis->setRange(lo,hi);
     }else{
-        plot->xAxis->setRange(corrdata->get_min(n,0.5),corrdata->get_max(n,0.5));
-        plot->yAxis->setRange(corrdata->get_min(0,0.5),corrdata->get_max(0,0.5));
+        double lo,hi;
+        corrdata->get_range(n,0.5,lo,hi);
+        plot->xAxis->setRange(lo,hi);
+        corrdata->get_range(0,0.5,lo,hi);
+        plot->yAxis->setRange(lo,hi);
     }
 
     plot->xAxis->setLabel(tr(corrdata->sig_name(n).c_str()));
@@ -1068,6 +1097,6 @@ void MainWindow::plot_data(QCustomPlot *plot,int n,int beg,int end)
     plot->graph(2)->setVisible(false);
     hide_recent_points(plot);
 
-    plot->replot();
+    plot->replot(QCustomPlot::rpQueuedReplot);
 
 }

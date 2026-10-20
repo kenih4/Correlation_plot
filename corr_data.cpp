@@ -403,132 +403,104 @@ void Corr_data::set_self_stats()
     sig[0].pval = 0.0;
     sig[0].mic_null = 0.0;
 }
+// rows に挙げたショットだけを使って、基準信号 sig[0] と各信号のMICなどを計算する。
+// 基準信号側の値(x)は全信号で共通なので1回だけ作る(Detrend も1回)。MINEは x,y を書き換えない。
+void Corr_data::calc_mic_rows(const vector<int> &rows)
+{
+    if(sig.empty())return;
+    set_self_stats();
+    int n = (int)rows.size();
+    if(n<2){
+        for(int i=1;i<(int)sig.size();i++){
+            sig[i].coefficient = 0;
+            sig[i].rho = 0;
+            sig[i].pval = 1;
+            sig[i].mic_null = 0;
+        }
+        return;
+    }
+    vector<double> x(n),y(n);
+    const string &name0 = sig[0].name;
+    for(int k=0;k<n;k++)x[k] = value(name0,rows[k]);
+    if(detrend_flg)detrend(x.data(),n);
+    double alpha = mic_alpha(n);
+    for(int i=1;i<(int)sig.size();i++){
+        const string &nm = sig[i].name;
+        for(int k=0;k<n;k++)y[k] = value(nm,rows[k]);
+        if(detrend_flg)detrend(y.data(),n);
+        MINE mine(alpha, 15, EST_MIC_APPROX);
+        mine.compute_score(x.data(),y.data(),n);
+        sig[i].coefficient = mine.mic();
+        calc_stats(i,x.data(),y.data(),n);
+    }
+}
+
 void Corr_data::calc_mic()
 {
-    MINE *mine;
-    double *x,*y;
-    int n;
-    double alpha=0.85;
-    set_self_stats();
-    for(int i=1;i<(int)sig.size();i++){
-        n = size;
-        x = new double [n];
-        y = new double [n];
-        alpha = mic_alpha(n);
-        mine = new MINE(alpha, 15, EST_MIC_APPROX);
-        for(int j=0;j<n;j++){
-            x[j] = value(sig[0].name,j);
-            y[j] = value(sig[i].name,j);
-        }
-        if(detrend_flg){
-            detrend(x,n);
-            detrend(y,n);
-        }
-        mine->compute_score(x,y,n);
-        sig[i].coefficient = mine->mic();
-        calc_stats(i,x,y,n);
-        delete mine;
-        delete [] x;
-        delete [] y;
-    }
+    vector<int> rows(size);
+    for(int i=0;i<size;i++)rows[i] = i;
+    calc_mic_rows(rows);
 }
+
 void Corr_data::calc_mic(double th)
 {
-    MINE *mine;
-    double *x,*y;
-    int n = 0,m = 0;
-    double alpha=0.85;
-    for(int i=0;i<(int)size;i++){
-        if(value(sig[0].name,i)>th){
-            n++;
-        }
+    vector<int> rows;
+    if(sig.empty())return;
+    const string &name0 = sig[0].name;
+    for(int i=0;i<size;i++){
+        if(value(name0,i)>th)rows.push_back(i);
     }
-    set_self_stats();
-    for(int i=1;i<(int)sig.size();i++){
-        if(n<2){
-            sig[i].coefficient = 0;
-            sig[i].rho = 0;
-            sig[i].pval = 1;
-            sig[i].mic_null = 0;
-            continue;
-        }
-        x = new double [n];
-        y = new double [n];
-        alpha = mic_alpha(n);
-        mine = new MINE(alpha, 15, EST_MIC_APPROX);
-
-        m = 0;
-        for(int j=0;j<(int)size;j++){
-            if( value(sig[0].name,j)>th){
-                x[m] = value(sig[0].name,j);
-                y[m] = value(sig[i].name,j);
-                m++;
-            }
-        }
-
-
-        if(detrend_flg){
-            detrend(x,n);
-            detrend(y,n);
-        }
-        mine->compute_score(x,y,n);
-        sig[i].coefficient = mine->mic();
-        calc_stats(i,x,y,n);
-        delete mine;
-        delete [] x;
-        delete [] y;
-    }
+    calc_mic_rows(rows);
 }
+
 void Corr_data::calc_mic(int beg,int end)
 {
-    MINE *mine;
-    double *x,*y;
-    int n = 0,m = 0;
-    double alpha=0.85;
+    vector<int> rows;
     struct tm buf;
-    for(int i=0;i<(int)size;i++){
-        strptime(endtime(i).c_str(),"%Y/%m/%d %H:%M:%S",&buf);
-        if(beg < mktime(&buf) && mktime(&buf) < end){
-            n++;
-        }
+    for(int i=0;i<size;i++){
+        memset(&buf,0,sizeof(buf));
+        buf.tm_isdst = -1;
+        if(strptime(endtime(i).c_str(),"%Y/%m/%d %H:%M:%S",&buf)==NULL)continue;
+        time_t t = mktime(&buf);
+        if(beg < t && t < end)rows.push_back(i);
     }
-    set_self_stats();
-    for(int i=1;i<(int)sig.size();i++){
-        if(n<2){
-            sig[i].coefficient = 0;
-            sig[i].rho = 0;
-            sig[i].pval = 1;
-            sig[i].mic_null = 0;
-            continue;
-        }
-        x = new double [n];
-        y = new double [n];
-        alpha = mic_alpha(n);
-        mine = new MINE(alpha, 15, EST_MIC_APPROX);
-
-        m = 0;
-        for(int j=0;j<(int)size;j++){
-            strptime(endtime(j).c_str(),"%Y/%m/%d %H:%M:%S",&buf);
-            if(beg < mktime(&buf) && mktime(&buf) < end){
-                x[m] = value(sig[0].name,j);
-                y[m] = value(sig[i].name,j);
-                m++;
-            }
-        }
-
-
-        if(detrend_flg){
-            detrend(x,n);
-            detrend(y,n);
-        }
-        mine->compute_score(x,y,n);
-        sig[i].coefficient = mine->mic();
-        calc_stats(i,x,y,n);
-        delete mine;
-        delete [] x;
-        delete [] y;
-    }
+    calc_mic_rows(rows);
 }
+
+// get_min/get_max と同じ値(最小/最大から比率 ratio だけ広げた範囲)を1回の走査で求める
+void Corr_data::get_range(int n,double ratio,double &lo,double &hi)
+{
+    lo = hi = 0;
+    if(size<1)return;
+    const string &nm = sig[n].name;
+    double mx = value(nm,0),mn = mx;
+    for(int i=1;i<size;i++){
+        double v = value(nm,i);
+        if(mx<v)mx = v;
+        if(mn>v)mn = v;
+    }
+    lo = mn - (mx - mn) * ratio;
+    hi = mx + (mx - mn) * ratio;
+}
+
+void Corr_data::get_range(int n,double ratio,int a,double th,double &lo,double &hi)
+{
+    lo = hi = 0;
+    if(size<1)return;
+    const string &nm = sig[n].name;
+    const string &na = sig[a].name;
+    double mx = value(nm,0),mn = mx;
+    for(int i=1;i<size;i++){
+        if(value(na,i)>th){
+            double v = value(nm,i);
+            if(mx<v)mx = v;
+            if(mn>v)mn = v;
+        }
+    }
+    lo = mn - (mx - mn) * ratio;
+    hi = mx + (mx - mn) * ratio;
+}
+
 double Corr_data::get_max(int n)
 {
 
@@ -654,11 +626,11 @@ void Corr_data::erase()
 
 void Corr_data::erase(int n)
 {
-    for(int i=0;i<n;i++){
-        data.erase(data.begin());
-        size-=1;
-    }
-    if(n>0)ver++;
+    if(n>(int)data.size())n = (int)data.size();
+    if(n<=0)return;
+    data.erase(data.begin(),data.begin()+n);    // 1回でまとめて詰める
+    size-=n;
+    ver++;
 }
 int Corr_data::add_tag(string strtime)
 {
@@ -673,7 +645,7 @@ int Corr_data::add_tag(string strtime)
     int status;
     char out[256];
     uint64_t btime;
-    sort(data.begin(),data.end());
+    if(!is_sorted(data.begin(),data.end()))sort(data.begin(),data.end());
     static int cnt = 1;
 
     // 基準になる時刻は、beg_time/end_time が入っている(有効な)エントリだけから取る。

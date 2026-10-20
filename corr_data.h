@@ -74,9 +74,9 @@ public:
     void db_get_sync_data();
     int data_size(){return size;};
     int sig_size(){return sig.size();};
-    string sig_name(int n){return sig[n].name;};
-    string sig_d_name(int n){return sig_d[n].name;};
-    double value(string signame,int n){
+    const string &sig_name(int n){return sig[n].name;};
+    const string &sig_d_name(int n){return sig_d[n].name;};
+    double value(const string &signame,int n){
         if(dflg != 0 && signame==sig[0].name){
             return data[n].value[signame]/data[n].denominator[sig_d[0].name]*100;
         }else{
@@ -100,6 +100,9 @@ public:
     double get_max(int n,double ratio);
     double get_min(int n,double ratio);
     double get_max(int n,double ratio,int a,double th);
+    // get_min/get_max と同じ値を、1回の走査でまとめて返す
+    void get_range(int n,double ratio,double &lo,double &hi);
+    void get_range(int n,double ratio,int a,double th,double &lo,double &hi);
     double get_min(int n,double ratio,int a,double th);
     int get_ranking(int ranking);
     int get_ranking(int ranking,bool flg);
@@ -134,6 +137,7 @@ private:
     vector<int> rank;
     int dflg;
     unsigned ver = 0;
+    void calc_mic_rows(const vector<int> &rows);
     void set_self_stats();      // 基準信号自身の指標(MIC=1など)。計算せず固定値にする
     bool rank_imp = false;      // 順位を重要度で決めるか
     bool imp_valid = false;     // 重要度が計算できているか(データ不足のときはMIC順に戻す)
