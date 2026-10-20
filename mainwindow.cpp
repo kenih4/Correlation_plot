@@ -57,7 +57,7 @@ MainWindow::MainWindow(QWidget *parent)
     ui->checkBox_th->setChecked(true);
     ui->checkBox->setChecked(true);     // Auto reload
     timer = new QTimer(this);
-    timer->setInterval(10000);
+    timer->setInterval(15000);
     connect(timer, SIGNAL(timeout()), this, SLOT(update_data()));
     timer->start();
     corrdata = new Corr_data(ui->spinBox->value(),ui->checkBox_calc->checkState());
