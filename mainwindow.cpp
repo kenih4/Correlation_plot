@@ -612,6 +612,8 @@ void MainWindow::on_pushButton_importance_clicked()
     table->resizeColumnsToContents();
     table->horizontalHeader()->setStretchLastSection(true);
     table->setSortingEnabled(true);
+    // 有効にした直後は既定の列(Rank)の降順になるので、Importance の高い順を明示する
+    table->sortByColumn(2,Qt::DescendingOrder);
     lay->addWidget(table);
 
     QLabel *note = new QLabel("Importance: その信号の値をシャッフルしたときに、OOB予測誤差が基準信号の分散の何%増えるか。"
