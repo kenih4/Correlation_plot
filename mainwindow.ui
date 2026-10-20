@@ -346,6 +346,16 @@
               </property>
              </widget>
             </item>
+            <item>
+             <widget class="QCheckBox" name="checkBox_stats">
+              <property name="toolTip">
+               <string>Show Spearman rho, p-value, MIC null95 and the binned mean curve</string>
+              </property>
+              <property name="text">
+               <string>Stats</string>
+              </property>
+             </widget>
+            </item>
            </layout>
           </item>
           <item>

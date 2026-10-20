@@ -63,6 +63,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(timer, SIGNAL(timeout()), this, SLOT(update_data()));
     timer->start();
     corrdata = new Corr_data(ui->spinBox->value(),ui->checkBox_calc->checkState());
+    corrdata->set_stats(ui->checkBox_stats->isChecked());
     createActions();
     createStatusBar();
     ui->radioButton->setChecked(true);
@@ -188,6 +189,7 @@ void MainWindow::on_pushButton_clicked()
 {
     delete corrdata;
     corrdata = new Corr_data(ui->spinBox->value(),ui->checkBox_calc->checkState());
+    corrdata->set_stats(ui->checkBox_stats->isChecked());
 
     for(int i= 0;i<ui->listWidget->count();++i){
         corrdata->add_signal(ui->listWidget->item(i)->text().toStdString().c_str());
@@ -309,6 +311,11 @@ void MainWindow::plot_trend(QCustomPlot *plot)
 QString MainWindow::update_binned_curve(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y)
 {
     BinnedItems &b = binned[plot];
+    if(!ui->checkBox_stats->isChecked()){
+        if(b.graph)b.graph->setVisible(false);
+        if(b.err)b.err->setVisible(false);
+        return QString();
+    }
     if(!b.graph){
         b.graph = plot->addGraph();
         b.graph->setPen(QPen(Qt::black,2));
@@ -332,6 +339,8 @@ QString MainWindow::update_binned_curve(QCustomPlot *plot,const QVector<double> 
 
     int n = pts.size();
     int nb = qBound(0,n/10,10);     // 1区間あたり10点以上
+    b.graph->setVisible(true);
+    b.err->setVisible(true);
     if(nb<3){
         b.graph->data()->clear();
         b.err->data().clear();
@@ -368,13 +377,18 @@ void MainWindow::set_info_text(QCustomPlot *plot,int n,const QString &best,const
         b.text->setBrush(QBrush(QColor(255,255,255,230)));
     }
     double mic = corrdata->mic(n);
+    b.text->setFont(font);
+    if(!ui->checkBox_stats->isChecked()){
+        b.text->setText(QString("mic : %1").arg(mic,0,'f',3));
+        b.text->setColor(Qt::black);
+        return;
+    }
     double nul = corrdata->mic_null(n);
     QString s = QString("mic : %1  (null95 %2)\nrho : %3  p : %4")
             .arg(mic,0,'f',3).arg(nul,0,'f',3)
             .arg(corrdata->rho(n),0,'f',2).arg(corrdata->pval(n),0,'f',3);
     if(!best.isEmpty())s += "\n" + best;
     b.text->setText(s);
-    b.text->setFont(font);
     // 偶然の範囲を超えていれば赤字
     bool significant = mic>nul && corrdata->pval(n)<0.05;
     b.text->setColor(significant ? QColor(200,0,0) : QColor(60,60,60));
@@ -435,6 +449,25 @@ void MainWindow::apply_gradient(QCustomPlot *plot)
             plot->graph(FIRST + b)->setData(bx[b], by[b]);
         }
     }
+}
+
+// Stats の切り替え時は、保持しているデータからMIC等を計算し直して描き直す(DBは読まない)
+void MainWindow::on_checkBox_stats_toggled(bool checked)
+{
+    corrdata->set_stats(checked);
+    if(corrdata->sig_size()<2 || corrdata->data_size()<2)return;
+    if(ui->checkBox_th->checkState()==Qt::Checked){
+        corrdata->calc_mic(ui->V_threshold->text().toDouble());
+    }else{
+        corrdata->calc_mic();
+    }
+    bool b = ui->checkBox_fix->checkState()!=Qt::Checked;
+    plot_data(ui->widget_1,corrdata->get_ranking(1,b));
+    plot_data(ui->widget_2,corrdata->get_ranking(2,b));
+    plot_data(ui->widget_3,corrdata->get_ranking(3,b));
+    plot_data(ui->widget_7,corrdata->get_ranking(4,b));
+    plot_data(ui->widget_8,corrdata->get_ranking(5,b));
+    plot_data(ui->widget_9,corrdata->get_ranking(6,b));
 }
 
 void MainWindow::on_checkBox_gradient_toggled(bool)

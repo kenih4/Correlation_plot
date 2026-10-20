@@ -93,6 +93,7 @@ public:
     int add_tag(string strtime);
     void add_db_get_sync_data();
     void rank_init(){rank.resize(0);};
+    void set_stats(bool f){stats_flg = f;};
     void set_flg(int f){dflg = f;cerr<<dflg<<endl;};
     void outfile(string);
 private:
@@ -105,6 +106,7 @@ private:
     vector<Data> data;
     vector<int> rank;
     int dflg;
+    bool stats_flg = false;    // rho / p値 / MICの無相関95%点を計算するか
 };
 
 #endif // CORR_DATA_H

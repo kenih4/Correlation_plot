@@ -264,7 +264,7 @@ void Corr_data::calc_stats(int i,double *x,double *y,int n)
     sig[i].rho = 0;
     sig[i].pval = 1;
     sig[i].mic_null = 0;
-    if(n<4)return;
+    if(!stats_flg || n<4)return;
 
     vector<double> rx = rank_avg(x,n);
     vector<double> ry = rank_avg(y,n);
