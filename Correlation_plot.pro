@@ -43,6 +43,3 @@ else: unix:!android: target.path = /opt/$${TARGET}/bin
 
 #include(/prj_pro/susele15pd64/gui_setup/prj2010gui_libs_xfel.pri)
 include ($$(QTGUI_SETUP)/prj2010gui_libs_xfel.pri)
-
-RESOURCES += \
-    figures.qrc
