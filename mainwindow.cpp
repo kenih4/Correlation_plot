@@ -7,7 +7,6 @@
 #include <QFileInfo>
 #include <QTextStream>
 #include <QDebug>
-#include <QToolButton>
 #include <QGridLayout>
 #include <QScreen>
 #include <QDialog>
@@ -457,7 +456,7 @@ void MainWindow::hide_recent_points(QCustomPlot *plot)
     }
 }
 
-// 散布図を6つ追加した領域(初期は非表示)と、右下の開閉ボタンを作る
+// 散布図を6つ追加した領域(初期は非表示)を作る。File メニューの More Scatter Plots で開閉する
 void MainWindow::create_extra_plots()
 {
     extra_container = new QWidget(ui->centralwidget);
@@ -473,29 +472,17 @@ void MainWindow::create_extra_plots()
     extra_container->hide();
     ui->verticalLayout_5->addWidget(extra_container,2);   // 既存の2段(各1)に対して2段分
 
-    extra_button = new QToolButton(ui->centralwidget);
-    extra_button->setArrowType(Qt::DownArrow);
-    extra_button->setAutoRaise(true);
-    extra_button->setFixedSize(24,20);
-    extra_button->setToolTip(tr("Show 6 more scatter plots"));
-    connect(extra_button,&QToolButton::clicked,this,&MainWindow::toggle_extra_plots);
-    QHBoxLayout *bar = new QHBoxLayout;
-    bar->setContentsMargins(0,0,5,2);
-    bar->addStretch(1);
-    bar->addWidget(extra_button);
-    ui->verticalLayout_5->addLayout(bar);
 }
 
-// 下矢印ボタン: ウィンドウを下に広げて散布図を6つ追加(合計12個)/元に戻す
-void MainWindow::toggle_extra_plots()
+// File メニュー: ウィンドウを下に広げて散布図を6つ追加(合計12個)/元に戻す
+void MainWindow::set_extra_plots(bool show)
 {
+    if(show==extra_visible)return;
     bool resizable = !isMaximized() && !isFullScreen();
-    if(!extra_visible){
+    if(show){
         extra_dh = extra_container->sizeHint().height() + ui->verticalLayout_5->spacing();
         extra_container->show();
         extra_visible = true;
-        extra_button->setArrowType(Qt::UpArrow);
-        extra_button->setToolTip(tr("Hide the extra scatter plots"));
         if(resizable){
             int h = height() + extra_dh;
             if(screen())h = qMin(h,screen()->availableGeometry().height());
@@ -505,8 +492,6 @@ void MainWindow::toggle_extra_plots()
     }else{
         extra_container->hide();
         extra_visible = false;
-        extra_button->setArrowType(Qt::DownArrow);
-        extra_button->setToolTip(tr("Show 6 more scatter plots"));
         if(resizable){
             resize(width(),qMax(minimumSizeHint().height(),height()-extra_dh));
         }
@@ -1065,6 +1050,12 @@ void MainWindow::createActions()
     importanceAct->setStatusTip(tr("Rank all signals at once by random forest importance (multivariate)"));
     connect(importanceAct, &QAction::triggered, this, &MainWindow::show_importance);
     fileMenu->addAction(importanceAct);
+
+    QAction *extraAct = new QAction(tr("&More Scatter Plots (12)"), this);
+    extraAct->setCheckable(true);
+    extraAct->setStatusTip(tr("Show 6 more scatter plots below (12 in total)"));
+    connect(extraAct, &QAction::toggled, this, &MainWindow::set_extra_plots);
+    fileMenu->addAction(extraAct);
 
     fileMenu->addSeparator();
 

@@ -3,7 +3,6 @@
 
 #include <QMainWindow>
 #include <QTreeWidget>
-#include <QToolButton>
 #include "corr_data.h"
 #include "qcustomplot.h"
 
@@ -51,12 +50,11 @@ private:
     void apply_gradient(QCustomPlot *plot);
     void refresh_plots();
     void create_extra_plots();
-    void toggle_extra_plots();
+    void set_extra_plots(bool show);
     void clear_plot(QCustomPlot *plot);
     void plot_extra(bool b);
     void plot_extra_range(int beg,int end);
     QWidget *extra_container = nullptr;
-    QToolButton *extra_button = nullptr;
     QVector<QCustomPlot*> extra_plots;
     bool extra_visible = false;
     int extra_dh = 0;
