@@ -39,13 +39,13 @@ private slots:
     void trendMouseMoved(QMouseEvent *event);
 
     void on_pushButton_3_clicked();
-    void on_checkBox_gradient_toggled(bool checked);
-    void on_checkBox_stats_toggled(bool checked);
+    void gradient_toggled(bool checked);     // File メニューの Gradient
+    void stats_toggled(bool checked);        // File メニューの Stats
     void on_checkBox_highlight_toggled(bool checked);
     void on_V_highlight_editingFinished();
     void detrend_toggled(bool checked);   // File メニューの Detrend
     void show_importance();     // File メニューの Importance
-    void on_checkBox_importance_toggled(bool checked);
+    void rank_importance_toggled(bool checked);   // File メニューの Rank by Importance
 
 private:
     void set_scatter_data(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y,const QVector<double> &yref);
@@ -57,7 +57,11 @@ private:
     void clear_plot(QCustomPlot *plot);
     void plot_extra(bool b);
     void plot_extra_range(int beg,int end);
-    QAction *detrend_act = nullptr;     // File メニューの Detrend(チェック式、初期値オン)
+    // File メニューのチェック式の項目(初期値: Detrend=オン、Rank by Importance=オン、Stats=オフ、Gradient=オフ)
+    QAction *detrend_act = nullptr;
+    QAction *stats_act = nullptr;
+    QAction *gradient_act = nullptr;
+    QAction *rank_importance_act = nullptr;
     QWidget *extra_container = nullptr;
     QVector<QCustomPlot*> extra_plots;
     bool extra_visible = false;

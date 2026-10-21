@@ -32,6 +32,21 @@ MainWindow::MainWindow(QWidget *parent)
     detrend_act->setCheckable(true);
     detrend_act->setChecked(true);
     detrend_act->setStatusTip(tr("Remove slow drift (subtract moving average) before computing correlation"));
+
+    stats_act = new QAction(tr("&Stats"), this);
+    stats_act->setCheckable(true);
+    stats_act->setChecked(false);
+    stats_act->setStatusTip(tr("Show Spearman rho, p-value, MIC null95 and the binned mean curve"));
+
+    gradient_act = new QAction(tr("&Gradient"), this);
+    gradient_act->setCheckable(true);
+    gradient_act->setChecked(false);
+    gradient_act->setStatusTip(tr("Color points from red (oldest) to blue (newest)"));
+
+    rank_importance_act = new QAction(tr("&Rank by Importance"), this);
+    rank_importance_act->setCheckable(true);
+    rank_importance_act->setChecked(true);
+    rank_importance_act->setStatusTip(tr("Order the scatter plots by random forest importance instead of MIC"));
     int status = db_init();
     cerr << "#### DB Init : " << status << endl;
     if(DB_OK != status)
@@ -81,9 +96,9 @@ MainWindow::MainWindow(QWidget *parent)
     connect(timer, SIGNAL(timeout()), this, SLOT(update_data()));
     timer->start();
     corrdata = new Corr_data(ui->spinBox->value(),ui->checkBox_calc->checkState());
-    corrdata->set_stats(ui->checkBox_stats->isChecked());
+    corrdata->set_stats(stats_act->isChecked());
     corrdata->set_detrend(detrend_act->isChecked());
-    corrdata->set_rank_importance(ui->checkBox_importance->isChecked());
+    corrdata->set_rank_importance(rank_importance_act->isChecked());
     createActions();
     createStatusBar();
     ui->radioButton->setChecked(true);
@@ -209,9 +224,9 @@ void MainWindow::on_pushButton_clicked()
 {
     delete corrdata;
     corrdata = new Corr_data(ui->spinBox->value(),ui->checkBox_calc->checkState());
-    corrdata->set_stats(ui->checkBox_stats->isChecked());
+    corrdata->set_stats(stats_act->isChecked());
     corrdata->set_detrend(detrend_act->isChecked());
-    corrdata->set_rank_importance(ui->checkBox_importance->isChecked());
+    corrdata->set_rank_importance(rank_importance_act->isChecked());
 
     for(int i= 0;i<ui->listWidget->count();++i){
         corrdata->add_signal(ui->listWidget->item(i)->text().toStdString().c_str());
@@ -333,7 +348,7 @@ void MainWindow::plot_trend(QCustomPlot *plot)
 QString MainWindow::update_binned_curve(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y)
 {
     BinnedItems &b = binned[plot];
-    if(!ui->checkBox_stats->isChecked()){
+    if(!stats_act->isChecked()){
         if(b.graph)b.graph->setVisible(false);
         if(b.err)b.err->setVisible(false);
         return QString();
@@ -407,7 +422,7 @@ void MainWindow::set_info_text(QCustomPlot *plot,int n,const QString &best,const
     if(corrdata->rank_importance()){
         impLine = QString("\nimp : %1 %").arg(corrdata->importance(n)*100,0,'f',1);
     }
-    if(!ui->checkBox_stats->isChecked()){
+    if(!stats_act->isChecked()){
         b.text->setText(QString("mic : %1").arg(mic,0,'f',3) + impLine);
         b.text->setColor(Qt::black);
         return;
@@ -579,7 +594,7 @@ void MainWindow::apply_display(QCustomPlot *plot)
     if(!scatter_xy.contains(plot))return;
     const int GRADIENT_BINS = 50;
     ScatterData &s = scatter_xy[plot];
-    bool grad = ui->checkBox_gradient->isChecked();
+    bool grad = gradient_act->isChecked();
     bool hl = ui->checkBox_highlight->isChecked();
 
     // graph(0): 全点。Highlight 中は灰色、それ以外は赤。
@@ -656,8 +671,8 @@ QString MainWindow::calc_signature()
           << ui->V_threshold->text()
           << QString::number(ui->checkBox_calc->checkState())
           << QString::number(detrend_act->isChecked())
-          << QString::number(ui->checkBox_stats->isChecked())
-          << QString::number(ui->checkBox_importance->isChecked())
+          << QString::number(stats_act->isChecked())
+          << QString::number(rank_importance_act->isChecked())
           << QString::number(ui->checkBox_fix->checkState())
           << QString::number(ui->checkBox_add->checkState())
           << QString::number(ui->spinBox->value());
@@ -696,13 +711,13 @@ void MainWindow::refresh_plots()
     mark_calculated();
 }
 
-void MainWindow::on_checkBox_stats_toggled(bool checked)
+void MainWindow::stats_toggled(bool checked)
 {
     corrdata->set_stats(checked);
     refresh_plots();
 }
 
-void MainWindow::on_checkBox_importance_toggled(bool checked)
+void MainWindow::rank_importance_toggled(bool checked)
 {
     corrdata->set_rank_importance(checked);
     corrdata->rank_init();      // Fix で保持している順位も作り直す
@@ -841,7 +856,7 @@ void MainWindow::set_range_from(QCustomPlot *plot,const QVector<double> &x,const
     if(range(y,lo,hi) && hi>lo)plot->yAxis->setRange(lo,hi);
 }
 
-void MainWindow::on_checkBox_gradient_toggled(bool)
+void MainWindow::gradient_toggled(bool)
 {
     for(auto it = scatter_xy.begin(); it != scatter_xy.end(); ++it){
         apply_display(it.key());
@@ -1113,8 +1128,15 @@ void MainWindow::createActions()
     connect(importanceAct, &QAction::triggered, this, &MainWindow::show_importance);
     fileMenu->addAction(importanceAct);
 
+    fileMenu->addSeparator();
+    fileMenu->addAction(rank_importance_act);
+    connect(rank_importance_act, &QAction::toggled, this, &MainWindow::rank_importance_toggled);
     fileMenu->addAction(detrend_act);
     connect(detrend_act, &QAction::toggled, this, &MainWindow::detrend_toggled);
+    fileMenu->addAction(stats_act);
+    connect(stats_act, &QAction::toggled, this, &MainWindow::stats_toggled);
+    fileMenu->addAction(gradient_act);
+    connect(gradient_act, &QAction::toggled, this, &MainWindow::gradient_toggled);
 
     QAction *extraAct = new QAction(tr("&More Scatter Plots (12)"), this);
     extraAct->setCheckable(true);
