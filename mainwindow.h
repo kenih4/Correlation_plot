@@ -43,7 +43,7 @@ private slots:
     void on_checkBox_stats_toggled(bool checked);
     void on_checkBox_highlight_toggled(bool checked);
     void on_V_highlight_editingFinished();
-    void on_checkBox_detrend_toggled(bool checked);
+    void detrend_toggled(bool checked);   // File メニューの Detrend
     void show_importance();     // File メニューの Importance
     void on_checkBox_importance_toggled(bool checked);
 
@@ -57,6 +57,7 @@ private:
     void clear_plot(QCustomPlot *plot);
     void plot_extra(bool b);
     void plot_extra_range(int beg,int end);
+    QAction *detrend_act = nullptr;     // File メニューの Detrend(チェック式、初期値オン)
     QWidget *extra_container = nullptr;
     QVector<QCustomPlot*> extra_plots;
     bool extra_visible = false;

@@ -26,6 +26,12 @@ MainWindow::MainWindow(QWidget *parent)
     , ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
+
+    // File メニューの Detrend。corrdata を作る前から状態を参照するので、先に作る(初期値はオン)
+    detrend_act = new QAction(tr("&Detrend"), this);
+    detrend_act->setCheckable(true);
+    detrend_act->setChecked(true);
+    detrend_act->setStatusTip(tr("Remove slow drift (subtract moving average) before computing correlation"));
     int status = db_init();
     cerr << "#### DB Init : " << status << endl;
     if(DB_OK != status)
@@ -76,7 +82,7 @@ MainWindow::MainWindow(QWidget *parent)
     timer->start();
     corrdata = new Corr_data(ui->spinBox->value(),ui->checkBox_calc->checkState());
     corrdata->set_stats(ui->checkBox_stats->isChecked());
-    corrdata->set_detrend(ui->checkBox_detrend->isChecked());
+    corrdata->set_detrend(detrend_act->isChecked());
     corrdata->set_rank_importance(ui->checkBox_importance->isChecked());
     createActions();
     createStatusBar();
@@ -204,7 +210,7 @@ void MainWindow::on_pushButton_clicked()
     delete corrdata;
     corrdata = new Corr_data(ui->spinBox->value(),ui->checkBox_calc->checkState());
     corrdata->set_stats(ui->checkBox_stats->isChecked());
-    corrdata->set_detrend(ui->checkBox_detrend->isChecked());
+    corrdata->set_detrend(detrend_act->isChecked());
     corrdata->set_rank_importance(ui->checkBox_importance->isChecked());
 
     for(int i= 0;i<ui->listWidget->count();++i){
@@ -344,7 +350,7 @@ QString MainWindow::update_binned_curve(QCustomPlot *plot,const QVector<double> 
 
     // MIC の計算と同じ条件(Threshold オンなら基準信号が閾値を超えたショットだけ)
     bool useTh = ui->checkBox_th->checkState()==Qt::Checked;
-    bool detrended = ui->checkBox_detrend->isChecked();   // 表示データは閾値で絞り込み済み
+    bool detrended = detrend_act->isChecked();   // 表示データは閾値で絞り込み済み
     double th = ui->V_threshold->text().toDouble();
     QVector<QPair<double,double>> pts;
     for(int i=0;i<x.size() && i<y.size();i++){
@@ -649,7 +655,7 @@ QString MainWindow::calc_signature()
     parts << QString::number(ui->checkBox_th->checkState())
           << ui->V_threshold->text()
           << QString::number(ui->checkBox_calc->checkState())
-          << QString::number(ui->checkBox_detrend->isChecked())
+          << QString::number(detrend_act->isChecked())
           << QString::number(ui->checkBox_stats->isChecked())
           << QString::number(ui->checkBox_importance->isChecked())
           << QString::number(ui->checkBox_fix->checkState())
@@ -703,7 +709,7 @@ void MainWindow::on_checkBox_importance_toggled(bool checked)
     refresh_plots();
 }
 
-void MainWindow::on_checkBox_detrend_toggled(bool checked)
+void MainWindow::detrend_toggled(bool checked)
 {
     corrdata->set_detrend(checked);
     refresh_plots();
@@ -718,7 +724,7 @@ void MainWindow::show_importance()
         return;
     }
     bool useTh = ui->checkBox_th->checkState()==Qt::Checked;
-    corrdata->set_detrend(ui->checkBox_detrend->isChecked());
+    corrdata->set_detrend(detrend_act->isChecked());
     // 表のMICは現在の条件で計算し直したものにする
     if(useTh){
         corrdata->calc_mic(ui->V_threshold->text().toDouble());
@@ -746,7 +752,7 @@ void MainWindow::show_importance()
 
     QString head = QString("Target : %1%2\nShots : %3    OOB R2 : %4")
             .arg(QString::fromStdString(corrdata->sig_name(0)))
-            .arg(ui->checkBox_detrend->isChecked() ? " (detrended)" : "")
+            .arg(detrend_act->isChecked() ? " (detrended)" : "")
             .arg(nrows).arg(r2,0,'f',3);
     QLabel *label = new QLabel(head,dlg);
     lay->addWidget(label);
@@ -870,7 +876,7 @@ void MainWindow::plot_data(QCustomPlot *plot,int n)
         x[i] = corrdata->value(name_x,i);
         y[i] = corrdata->value(name_y,i);
     }
-    bool dt = ui->checkBox_detrend->isChecked();
+    bool dt = detrend_act->isChecked();
     QVector<double> yraw = y;
     if(dt)detrend_xy(x,y,yraw);
     set_scatter_data(plot,x,y,yraw);
@@ -1107,6 +1113,9 @@ void MainWindow::createActions()
     connect(importanceAct, &QAction::triggered, this, &MainWindow::show_importance);
     fileMenu->addAction(importanceAct);
 
+    fileMenu->addAction(detrend_act);
+    connect(detrend_act, &QAction::toggled, this, &MainWindow::detrend_toggled);
+
     QAction *extraAct = new QAction(tr("&More Scatter Plots (12)"), this);
     extraAct->setCheckable(true);
     extraAct->setStatusTip(tr("Show 6 more scatter plots below (12 in total)"));
@@ -1217,7 +1226,7 @@ void MainWindow::plot_data(QCustomPlot *plot,int n,int beg,int end)
             m++;
         }
     }
-    bool dt = ui->checkBox_detrend->isChecked();
+    bool dt = detrend_act->isChecked();
     QVector<double> yraw = y;
     if(dt)detrend_xy(x,y,yraw);
     set_scatter_data(plot,x,y,yraw);
