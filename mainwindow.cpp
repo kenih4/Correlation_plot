@@ -43,6 +43,11 @@ MainWindow::MainWindow(QWidget *parent)
     gradient_act->setChecked(false);
     gradient_act->setStatusTip(tr("Color points from red (oldest) to blue (newest)"));
 
+    line_act = new QAction(tr("&Connect Latest 3 Points"), this);
+    line_act->setCheckable(true);
+    line_act->setChecked(false);
+    line_act->setStatusTip(tr("Draw a line through the latest 3 points of each scatter plot"));
+
     rank_importance_act = new QAction(tr("&Rank by Importance"), this);
     rank_importance_act->setCheckable(true);
     rank_importance_act->setChecked(true);
@@ -467,6 +472,35 @@ void MainWindow::set_recent_points(QCustomPlot *plot,const QVector<double> &x,co
     pick(plot->graph(1),2);
     pick(r.g3,3);
     pick(r.g4,4);
+    r.range_mode = false;
+    update_recent_line(plot,x,y);
+}
+
+// 最新3点(古い順に 3番目 → 2番目 → 最新)を線でつなぐ。トレンドグラフ(ui->widget)は対象外。
+// QCPGraph は x の順に並べ替えてしまうので、順序を保つ QCPCurve を使う。
+void MainWindow::update_recent_line(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y)
+{
+    if(plot==ui->widget)return;
+    RecentGraphs &r = recent[plot];
+    bool on = line_act->isChecked() && !r.range_mode && x.size()>=3 && y.size()>=3;
+    if(!on){
+        if(r.line)r.line->setVisible(false);
+        return;
+    }
+    if(!r.line){
+        r.line = new QCPCurve(plot->xAxis,plot->yAxis);
+        r.line->setPen(QPen(QColor(90,90,90),1.5));
+        r.line->setLayer("grid");   // 点(main)の下に描く
+    }
+    int n = x.size();
+    QVector<double> t(3),lx(3),ly(3);
+    for(int k=0;k<3;k++){
+        t[k] = k;
+        lx[k] = x[n-3+k];
+        ly[k] = y[y.size()-3+k];
+    }
+    r.line->setData(t,lx,ly);
+    r.line->setVisible(true);
 }
 
 void MainWindow::hide_recent_points(QCustomPlot *plot)
@@ -475,6 +509,8 @@ void MainWindow::hide_recent_points(QCustomPlot *plot)
         recent[plot].g3->setVisible(false);
         recent[plot].g4->setVisible(false);
     }
+    recent[plot].range_mode = true;
+    if(recent[plot].line)recent[plot].line->setVisible(false);
 }
 
 // 散布図を6つ追加した領域(初期は非表示)を作る。File メニューの More Scatter Plots で開閉する
@@ -527,6 +563,7 @@ void MainWindow::clear_plot(QCustomPlot *plot)
         if(binned[plot].text)binned[plot].text->setVisible(false);
         if(binned[plot].err)binned[plot].err->data().clear();
     }
+    if(recent.contains(plot) && recent[plot].line)recent[plot].line->setVisible(false);
     scatter_xy.remove(plot);
     plot->xAxis->setLabel(QString());
     plot->yAxis->setLabel(QString());
@@ -864,6 +901,14 @@ void MainWindow::gradient_toggled(bool)
     }
 }
 
+void MainWindow::line_toggled(bool)
+{
+    for(auto it = scatter_xy.begin(); it != scatter_xy.end(); ++it){
+        update_recent_line(it.key(),it.value().x,it.value().y);
+        it.key()->replot();
+    }
+}
+
 // Highlight の切り替え/閾値の変更は、保持しているデータで表示だけ描き直す
 void MainWindow::on_checkBox_highlight_toggled(bool)
 {
@@ -1137,6 +1182,8 @@ void MainWindow::createActions()
     connect(stats_act, &QAction::toggled, this, &MainWindow::stats_toggled);
     fileMenu->addAction(gradient_act);
     connect(gradient_act, &QAction::toggled, this, &MainWindow::gradient_toggled);
+    fileMenu->addAction(line_act);
+    connect(line_act, &QAction::toggled, this, &MainWindow::line_toggled);
 
     QAction *extraAct = new QAction(tr("&More Scatter Plots (12)"), this);
     extraAct->setCheckable(true);

@@ -40,6 +40,7 @@ private slots:
 
     void on_pushButton_3_clicked();
     void gradient_toggled(bool checked);     // File メニューの Gradient
+    void line_toggled(bool checked);         // File メニューの Connect Latest 3 Points
     void stats_toggled(bool checked);        // File メニューの Stats
     void on_checkBox_highlight_toggled(bool checked);
     void on_V_highlight_editingFinished();
@@ -62,6 +63,7 @@ private:
     QAction *stats_act = nullptr;
     QAction *gradient_act = nullptr;
     QAction *rank_importance_act = nullptr;
+    QAction *line_act = nullptr;        // 最新3点を線でつなぐ(初期値オフ)
     QWidget *extra_container = nullptr;
     QVector<QCustomPlot*> extra_plots;
     bool extra_visible = false;
@@ -76,7 +78,10 @@ private:
     struct RecentGraphs{
         QCPGraph *g3 = nullptr;
         QCPGraph *g4 = nullptr;
+        QCPCurve *line = nullptr;   // 最新3点をつなぐ線(点の順序を保つため QCPCurve)
+        bool range_mode = false;    // 時間範囲指定の表示中は「最新」がないので線も出さない
     };
+    void update_recent_line(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y);
     QMap<QCustomPlot*,RecentGraphs> recent;
     void detrend_xy(QVector<double> &x,QVector<double> &y,QVector<double> &yraw);
     void set_range_from(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y);
