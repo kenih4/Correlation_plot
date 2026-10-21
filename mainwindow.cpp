@@ -46,7 +46,7 @@ MainWindow::MainWindow(QWidget *parent)
     line_act = new QAction(tr("&Connect Latest 3 Points"), this);
     line_act->setCheckable(true);
     line_act->setChecked(false);
-    line_act->setStatusTip(tr("Draw a line through the latest 3 points of each scatter plot"));
+    line_act->setStatusTip(tr("Draw a line through the latest 3 points of each scatter plot and the trend graph"));
 
     rank_importance_act = new QAction(tr("&Rank by Importance"), this);
     rank_importance_act->setCheckable(true);
@@ -476,11 +476,10 @@ void MainWindow::set_recent_points(QCustomPlot *plot,const QVector<double> &x,co
     update_recent_line(plot,x,y);
 }
 
-// 最新3点(古い順に 3番目 → 2番目 → 最新)を線でつなぐ。トレンドグラフ(ui->widget)は対象外。
+// 最新3点(古い順に 3番目 → 2番目 → 最新)を線でつなぐ。散布図とトレンドグラフの両方が対象。
 // QCPGraph は x の順に並べ替えてしまうので、順序を保つ QCPCurve を使う。
 void MainWindow::update_recent_line(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y)
 {
-    if(plot==ui->widget)return;
     RecentGraphs &r = recent[plot];
     bool on = line_act->isChecked() && !r.range_mode && x.size()>=3 && y.size()>=3;
     if(!on){
