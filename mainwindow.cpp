@@ -1115,7 +1115,7 @@ void MainWindow::createActions()
     QMenu *fileMenu = menuBar()->addMenu(tr("&File"));
     //    QToolBar *fileToolBar = addToolBar(tr("File"));
 
-    const QIcon saveIcon = QIcon::fromTheme("document-save", QIcon(":/images/save.png"));
+    const QIcon saveIcon = QIcon::fromTheme("document-save");
     QAction *saveAct = new QAction(saveIcon, tr("&Save"), this);
     saveAct->setShortcuts(QKeySequence::Save);
     saveAct->setStatusTip(tr("Save the document to disk"));
