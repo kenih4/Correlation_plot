@@ -285,7 +285,7 @@ void MainWindow::plot_trend(QCustomPlot *plot)
         //        y[i] = corrdata->value(corrdata->sig_name(0),i)/(corrdata->denominator(corrdata->sig_d_name(0),i)*1e-9/(1.60219e-19))*100;
     }
     //    DLOG<<"****  "<<corrdata->sig_name(n)<<"  2****"<<endl;
-    set_scatter_data(plot,x,y);
+    set_scatter_data(plot,x,y,y);
 
     set_recent_points(plot,x,y);
     //    DLOG<<"****  "<<corrdata->sig_name(n)<<"  2****"<<endl;
@@ -540,34 +540,79 @@ void MainWindow::plot_extra_range(int beg,int end)
 }
 
 // 散布図のデータを設定する(古い順に並んだ x,y)
-void MainWindow::set_scatter_data(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y)
+void MainWindow::set_scatter_data(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y,const QVector<double> &yref)
 {
-    // Gradient オンで非表示になる graph(0) には、データを入れない(setData は x での並べ替えが走る)。
-    // トレンド(ui->widget)は tracer が graph(0) のデータを使うので常に入れる。
-    bool skip0 = ui->checkBox_gradient->isChecked() && plot!=ui->widget;
-    if(!skip0)plot->graph(0)->setData(x,y);
-    scatter_xy[plot] = qMakePair(x,y);
-    apply_gradient(plot);
+    ScatterData &s = scatter_xy[plot];
+    s.x = x;
+    s.y = y;
+    s.yref = yref;
+    update_highlight_mask(plot);
+    apply_display(plot);
 }
 
-// Gradient チェックONなら、最古=赤 → 最新=青 のグラデーションで表示する。
-// 1点ごとの色指定はできないため、色ごとのグラフ(GRADIENT_BINS個)に点を振り分ける。
-void MainWindow::apply_gradient(QCustomPlot *plot)
+// Highlight の閾値以上かどうかを点ごとに求める
+void MainWindow::update_highlight_mask(QCustomPlot *plot)
 {
-    const int GRADIENT_BINS = 50;
-    bool on = ui->checkBox_gradient->isChecked();
+    if(!scatter_xy.contains(plot))return;
+    ScatterData &s = scatter_xy[plot];
+    double thr = ui->V_highlight->text().toDouble();
+    s.hi.resize(s.x.size());
+    for(int i=0;i<s.x.size();i++){
+        s.hi[i] = (i<s.yref.size() && s.yref[i]>=thr) ? 1 : 0;
+    }
+}
 
-    // graph(0..2) は通常表示用。グラデーション用のグラフは、その後ろ(最初に作った時点の末尾)に追加する
-    if(on && !gradient_first.contains(plot)){
+// 点の色を決めて表示する。
+//   通常      : 全点を赤(graph(0))
+//   Gradient  : 最古=赤 → 最新=青 のグラデーション。1点ごとの色指定はできないので、
+//               色ごとのグラフ(GRADIENT_BINS個)に点を振り分ける
+//   Highlight : 閾値以上の点だけ色を付け(赤、またはGradient)、それ以外は灰色(graph(0))にする
+// 最新4点の色(青/紫/マゼンタ/オレンジ)は別のグラフで重ねているので、どの設定でも変わらない。
+void MainWindow::apply_display(QCustomPlot *plot)
+{
+    if(!scatter_xy.contains(plot))return;
+    const int GRADIENT_BINS = 50;
+    ScatterData &s = scatter_xy[plot];
+    bool grad = ui->checkBox_gradient->isChecked();
+    bool hl = ui->checkBox_highlight->isChecked();
+
+    // graph(0): 全点。Highlight 中は灰色、それ以外は赤。
+    // Gradient だけで非表示になる graph(0) には、データを入れない(setData は x での並べ替えが走る)。
+    // トレンド(ui->widget)は tracer が graph(0) のデータを使うので常に入れる。
+    QCPGraph *g0 = plot->graph(0);
+    if(!grad || hl || plot==ui->widget)g0->setData(s.x,s.y);
+    g0->setVisible(!grad || hl);
+    QColor c0 = hl ? QColor(170,170,170) : QColor(Qt::red);
+    g0->setPen(QPen(c0));
+    g0->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,c0,Qt::white,5));
+
+    // 強調する点だけの赤いグラフ(Highlight かつ Gradient でないとき)
+    if(hl && !grad){
+        QCPGraph *&hg = highlight_graph[plot];
+        if(!hg){
+            hg = plot->addGraph();
+            hg->setPen(QPen(Qt::red));
+            hg->setLineStyle(QCPGraph::lsNone);
+            hg->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,Qt::red,Qt::white,5));
+        }
+        QVector<double> hx,hy;
+        for(int i=0;i<s.x.size();i++){
+            if(s.hi[i]){hx.append(s.x[i]);hy.append(s.y[i]);}
+        }
+        hg->setData(hx,hy);
+        hg->setVisible(true);
+    }else if(highlight_graph.contains(plot) && highlight_graph[plot]){
+        highlight_graph[plot]->setVisible(false);
+    }
+
+    // グラデーション用のグラフは、その後ろ(最初に作った時点の末尾)に追加する
+    if(grad && !gradient_first.contains(plot)){
         gradient_first[plot] = plot->graphCount();
     }
-    if(!gradient_first.contains(plot)){
-        plot->graph(0)->setVisible(true);
-        return;
-    }
+    if(!gradient_first.contains(plot))return;
     const int FIRST = gradient_first[plot];
 
-    if(on){
+    if(grad){
         while(plot->graphCount() < FIRST + GRADIENT_BINS){
             double t = (plot->graphCount() - FIRST) / (double)(GRADIENT_BINS - 1);
             QColor col(qRound(255 * (1 - t)), 0, qRound(255 * t));
@@ -577,21 +622,19 @@ void MainWindow::apply_gradient(QCustomPlot *plot)
             g->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle, col, Qt::white, 5));
         }
     }
-    plot->graph(0)->setVisible(!on);
     for(int b=0;b<GRADIENT_BINS && FIRST + b < plot->graphCount();b++){
-        plot->graph(FIRST + b)->setVisible(on);
+        plot->graph(FIRST + b)->setVisible(grad);
     }
 
-    if(on && scatter_xy.contains(plot)){
-        const QVector<double> &x = scatter_xy[plot].first;
-        const QVector<double> &y = scatter_xy[plot].second;
-        int n = x.size();
+    if(grad){
+        int n = s.x.size();
         QVector<QVector<double>> bx(GRADIENT_BINS), by(GRADIENT_BINS);
         for(int i=0;i<n;i++){
-            double t = (n > 1) ? i / (double)(n - 1) : 1.0;
+            if(hl && !s.hi[i])continue;     // 閾値未満は灰色(graph(0))
+            double t = (n > 1) ? i / (double)(n - 1) : 1.0;     // 位置は全点の中での古さ
             int b = qRound(t * (GRADIENT_BINS - 1));
-            bx[b].append(x[i]);
-            by[b].append(y[i]);
+            bx[b].append(s.x[i]);
+            by[b].append(s.y[i]);
         }
         for(int b=0;b<GRADIENT_BINS;b++){
             plot->graph(FIRST + b)->setData(bx[b], by[b]);
@@ -751,15 +794,16 @@ void MainWindow::show_importance()
 }
 
 // Detrend オンのときの表示用データ。MICの計算と同じ手順(閾値を超えたショットだけを残し、移動平均を引く)にする
-void MainWindow::detrend_xy(QVector<double> &x,QVector<double> &y)
+void MainWindow::detrend_xy(QVector<double> &x,QVector<double> &y,QVector<double> &yraw)
 {
     bool useTh = ui->checkBox_th->checkState()==Qt::Checked;
     double th = ui->V_threshold->text().toDouble();
-    QVector<double> xs,ys;
+    QVector<double> xs,ys,rs;
     for(int i=0;i<x.size() && i<y.size();i++){
         if(useTh && !(y[i]>th))continue;
         xs.append(x[i]);
         ys.append(y[i]);
+        rs.append(y[i]);
     }
     if(!xs.isEmpty()){
         Corr_data::detrend(xs.data(),xs.size());
@@ -767,6 +811,7 @@ void MainWindow::detrend_xy(QVector<double> &x,QVector<double> &y)
     }
     x = xs;
     y = ys;
+    yraw = rs;
 }
 
 // 従来の get_min/get_max(0.5) と同じ余白で、x,y の範囲から軸範囲を決める
@@ -792,13 +837,23 @@ void MainWindow::set_range_from(QCustomPlot *plot,const QVector<double> &x,const
 
 void MainWindow::on_checkBox_gradient_toggled(bool)
 {
-    bool on = ui->checkBox_gradient->isChecked();
     for(auto it = scatter_xy.begin(); it != scatter_xy.end(); ++it){
-        if(!on){
-            // オフに戻すとき、入れていなかった graph(0) のデータを入れ直す
-            it.key()->graph(0)->setData(it.value().first,it.value().second);
-        }
-        apply_gradient(it.key());
+        apply_display(it.key());
+        it.key()->replot();
+    }
+}
+
+// Highlight の切り替え/閾値の変更は、保持しているデータで表示だけ描き直す
+void MainWindow::on_checkBox_highlight_toggled(bool)
+{
+    on_V_highlight_editingFinished();
+}
+
+void MainWindow::on_V_highlight_editingFinished()
+{
+    for(auto it = scatter_xy.begin(); it != scatter_xy.end(); ++it){
+        update_highlight_mask(it.key());
+        apply_display(it.key());
         it.key()->replot();
     }
 }
@@ -816,8 +871,9 @@ void MainWindow::plot_data(QCustomPlot *plot,int n)
         y[i] = corrdata->value(name_y,i);
     }
     bool dt = ui->checkBox_detrend->isChecked();
-    if(dt)detrend_xy(x,y);
-    set_scatter_data(plot,x,y);
+    QVector<double> yraw = y;
+    if(dt)detrend_xy(x,y,yraw);
+    set_scatter_data(plot,x,y,yraw);
     QString best = update_binned_curve(plot,x,y);
 
     set_recent_points(plot,x,y);
@@ -1162,8 +1218,9 @@ void MainWindow::plot_data(QCustomPlot *plot,int n,int beg,int end)
         }
     }
     bool dt = ui->checkBox_detrend->isChecked();
-    if(dt)detrend_xy(x,y);
-    set_scatter_data(plot,x,y);
+    QVector<double> yraw = y;
+    if(dt)detrend_xy(x,y,yraw);
+    set_scatter_data(plot,x,y,yraw);
     QString best = update_binned_curve(plot,x,y);
 
     if(dt){

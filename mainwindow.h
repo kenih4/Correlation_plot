@@ -41,13 +41,16 @@ private slots:
     void on_pushButton_3_clicked();
     void on_checkBox_gradient_toggled(bool checked);
     void on_checkBox_stats_toggled(bool checked);
+    void on_checkBox_highlight_toggled(bool checked);
+    void on_V_highlight_editingFinished();
     void on_checkBox_detrend_toggled(bool checked);
     void show_importance();     // File メニューの Importance
     void on_checkBox_importance_toggled(bool checked);
 
 private:
-    void set_scatter_data(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y);
-    void apply_gradient(QCustomPlot *plot);
+    void set_scatter_data(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y,const QVector<double> &yref);
+    void apply_display(QCustomPlot *plot);
+    void update_highlight_mask(QCustomPlot *plot);
     void refresh_plots();
     void create_extra_plots();
     void set_extra_plots(bool show);
@@ -70,7 +73,7 @@ private:
         QCPGraph *g4 = nullptr;
     };
     QMap<QCustomPlot*,RecentGraphs> recent;
-    void detrend_xy(QVector<double> &x,QVector<double> &y);
+    void detrend_xy(QVector<double> &x,QVector<double> &y,QVector<double> &yraw);
     void set_range_from(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y);
     QString update_binned_curve(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y);
     void set_info_text(QCustomPlot *plot,int n,const QString &best,const QFont &font);
@@ -81,7 +84,13 @@ private:
     };
     QMap<QCustomPlot*,BinnedItems> binned;
     QMap<QCustomPlot*,int> gradient_first;
-    QMap<QCustomPlot*,QPair<QVector<double>,QVector<double>>> scatter_xy;
+    struct ScatterData{
+        QVector<double> x,y;
+        QVector<double> yref;   // 強調の判定に使う値(トレンドグラフの値)。Detrend時も元の値
+        QVector<char> hi;       // yref が閾値以上なら1
+    };
+    QMap<QCustomPlot*,ScatterData> scatter_xy;
+    QMap<QCustomPlot*,QCPGraph*> highlight_graph;
     QString signal_list_file(const QString &name);
     bool load_signal_list(QListWidget *list, const QString &name);
     void save_signal_list(QListWidget *list, const QString &name);
