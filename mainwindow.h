@@ -104,7 +104,7 @@ private:
     };
     QMap<QCustomPlot*,ScatterData> scatter_xy;
     QMap<QCustomPlot*,QCPGraph*> highlight_graph;
-    QMap<QCustomPlot*,QCPGraph*> hover_graph;   // トレンドグラフで指した点に対応する散布図の点を囲む輪
+    QMap<QCustomPlot*,QCPGraph*> hover_graph;   // トレンドグラフで指した点に対応する散布図の点を囲む輪(赤)
     int hover_shot = -1;
     QString signal_list_file(const QString &name);
     bool load_signal_list(QListWidget *list, const QString &name);

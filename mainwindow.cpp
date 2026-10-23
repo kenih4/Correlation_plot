@@ -243,7 +243,7 @@ void MainWindow::highlight_shot(int shot)
         if(!hg){
             hg = plot->addGraph();
             hg->setLineStyle(QCPGraph::lsNone);
-            hg->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,QPen(Qt::black,2.5),QBrush(Qt::NoBrush),18));
+            hg->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,QPen(Qt::red,2.5),QBrush(Qt::NoBrush),18));
         }
         QVector<double> hx(1,s.x[k]),hy(1,s.y[k]);
         hg->setData(hx,hy);
