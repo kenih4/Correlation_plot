@@ -125,6 +125,7 @@ MainWindow::MainWindow(QWidget *parent)
     tracer->setBrush(Qt::red);
     tracer->setSize(7);
     connect(ui->widget,SIGNAL(mouseMove(QMouseEvent*)),this,SLOT(trendMouseMoved(QMouseEvent*)));
+    ui->widget->installEventFilter(this);
     tracerText = new QCPItemText(ui->widget);
     tracerText->position->setType(QCPItemPosition::ptAxisRectRatio);
     tracerText->setFont(QFont(font().family(),8));
@@ -200,6 +201,64 @@ void MainWindow::trendMouseMoved(QMouseEvent *event){
     tracer->setVisible(true);
     tracerText->setVisible(true);
     ui->widget->replot();
+
+    // マウスが指しているデータ点(12ピクセル以内で最も近い点)のショットを、散布図でも囲んで示す
+    int hit = -1;
+    if(scatter_xy.contains(ui->widget)){
+        const ScatterData &s = scatter_xy[ui->widget];
+        double best = 12.0*12.0;
+        for(int k=0;k<s.x.size();k++){
+            double dx = ui->widget->xAxis->coordToPixel(s.x[k]) - pos.x();
+            double dy = ui->widget->yAxis->coordToPixel(s.y[k]) - pos.y();
+            double d = dx*dx + dy*dy;
+            if(d<best){best = d;hit = s.shot[k];}
+        }
+    }
+    highlight_shot(hit);
+}
+
+// トレンドグラフで指したショット(-1 なら指していない)を、各散布図の対応する点を輪で囲んで示す。
+// 検定や Detrend で表示から外れているショットは、その散布図には出ない。
+void MainWindow::highlight_shot(int shot)
+{
+    if(shot==hover_shot)return;
+    hover_shot = shot;
+    for(auto it = scatter_xy.begin(); it != scatter_xy.end(); ++it){
+        QCustomPlot *plot = it.key();
+        if(plot==ui->widget || !plot->isVisible())continue;
+        QCPGraph *&hg = hover_graph[plot];
+        const ScatterData &s = it.value();
+        int k = -1;
+        if(shot>=0){
+            auto pos = std::lower_bound(s.shot.begin(),s.shot.end(),shot);
+            if(pos!=s.shot.end() && *pos==shot)k = pos - s.shot.begin();
+        }
+        if(k<0){
+            if(hg && hg->visible()){
+                hg->setVisible(false);
+                plot->replot(QCustomPlot::rpQueuedReplot);
+            }
+            continue;
+        }
+        if(!hg){
+            hg = plot->addGraph();
+            hg->setLineStyle(QCPGraph::lsNone);
+            hg->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,QPen(Qt::black,2.5),QBrush(Qt::NoBrush),18));
+        }
+        QVector<double> hx(1,s.x[k]),hy(1,s.y[k]);
+        hg->setData(hx,hy);
+        hg->setVisible(true);
+        plot->replot(QCustomPlot::rpQueuedReplot);
+    }
+}
+
+// トレンドグラフからマウスが出たら、散布図の輪を消す
+bool MainWindow::eventFilter(QObject *obj, QEvent *event)
+{
+    if(obj==ui->widget && event->type()==QEvent::Leave){
+        highlight_shot(-1);
+    }
+    return QMainWindow::eventFilter(obj,event);
 }
 void MainWindow::mousePress()
 {
@@ -311,7 +370,9 @@ void MainWindow::plot_trend(QCustomPlot *plot)
         //        y[i] = corrdata->value(corrdata->sig_name(0),i)/(corrdata->denominator(corrdata->sig_d_name(0),i)*1e-9/(1.60219e-19))*100;
     }
     //    DLOG<<"****  "<<corrdata->sig_name(n)<<"  2****"<<endl;
-    set_scatter_data(plot,x,y,y);
+    QVector<int> shot_all(x.size());
+    for(int i=0;i<shot_all.size();i++)shot_all[i] = i;
+    set_scatter_data(plot,x,y,y,shot_all);
 
     set_recent_points(plot,x,y);
     //    DLOG<<"****  "<<corrdata->sig_name(n)<<"  2****"<<endl;
@@ -597,12 +658,16 @@ void MainWindow::plot_extra_range(int beg,int end)
 }
 
 // 散布図のデータを設定する(古い順に並んだ x,y)
-void MainWindow::set_scatter_data(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y,const QVector<double> &yref)
+void MainWindow::set_scatter_data(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y,const QVector<double> &yref,const QVector<int> &shot)
 {
     ScatterData &s = scatter_xy[plot];
     s.x = x;
     s.y = y;
     s.yref = yref;
+    s.shot = shot;
+    // データが入れ替わると添字の意味が変わるので、指した点の輪は消す
+    if(hover_graph.contains(plot) && hover_graph[plot])hover_graph[plot]->setVisible(false);
+    hover_shot = -1;
     update_highlight_mask(plot);
     apply_display(plot);
 }
@@ -851,16 +916,18 @@ void MainWindow::show_importance()
 }
 
 // Detrend オンのときの表示用データ。MICの計算と同じ手順(閾値を超えたショットだけを残し、移動平均を引く)にする
-void MainWindow::detrend_xy(QVector<double> &x,QVector<double> &y,QVector<double> &yraw)
+void MainWindow::detrend_xy(QVector<double> &x,QVector<double> &y,QVector<double> &yraw,QVector<int> &shot)
 {
     bool useTh = ui->checkBox_th->checkState()==Qt::Checked;
     double th = ui->V_threshold->text().toDouble();
     QVector<double> xs,ys,rs;
+    QVector<int> ss;
     for(int i=0;i<x.size() && i<y.size();i++){
         if(useTh && !(y[i]>th))continue;
         xs.append(x[i]);
         ys.append(y[i]);
         rs.append(y[i]);
+        ss.append(i<shot.size() ? shot[i] : i);
     }
     if(!xs.isEmpty()){
         Corr_data::detrend(xs.data(),xs.size());
@@ -869,6 +936,7 @@ void MainWindow::detrend_xy(QVector<double> &x,QVector<double> &y,QVector<double
     x = xs;
     y = ys;
     yraw = rs;
+    shot = ss;
 }
 
 // 従来の get_min/get_max(0.5) と同じ余白で、x,y の範囲から軸範囲を決める
@@ -937,8 +1005,10 @@ void MainWindow::plot_data(QCustomPlot *plot,int n)
     }
     bool dt = detrend_act->isChecked();
     QVector<double> yraw = y;
-    if(dt)detrend_xy(x,y,yraw);
-    set_scatter_data(plot,x,y,yraw);
+    QVector<int> shot(x.size());
+    for(int i=0;i<shot.size();i++)shot[i] = i;
+    if(dt)detrend_xy(x,y,yraw,shot);
+    set_scatter_data(plot,x,y,yraw,shot);
     QString best = update_binned_curve(plot,x,y);
 
     set_recent_points(plot,x,y);
@@ -1283,6 +1353,7 @@ void MainWindow::plot_data(QCustomPlot *plot,int n,int beg,int end)
     }
     DLOG<<"m = "<<m<<endl;
     QVector<double> x(m),y(m);
+    QVector<int> shot(m);
     m=0;
     const string &name_x = corrdata->sig_name(n);
     const string &name_y = corrdata->sig_name(0);
@@ -1291,13 +1362,14 @@ void MainWindow::plot_data(QCustomPlot *plot,int n,int beg,int end)
         if(beg < mktime(&buf) && mktime(&buf) < end){
             x[m] = corrdata->value(name_x,i);
             y[m] = corrdata->value(name_y,i);
+            shot[m] = i;
             m++;
         }
     }
     bool dt = detrend_act->isChecked();
     QVector<double> yraw = y;
-    if(dt)detrend_xy(x,y,yraw);
-    set_scatter_data(plot,x,y,yraw);
+    if(dt)detrend_xy(x,y,yraw,shot);
+    set_scatter_data(plot,x,y,yraw,shot);
     QString best = update_binned_curve(plot,x,y);
 
     if(dt){

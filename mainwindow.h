@@ -17,6 +17,7 @@ class MainWindow : public QMainWindow
 public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
+    bool eventFilter(QObject *obj, QEvent *event) override;
     void create_tree();
 private slots:
     void on_pushButton_clicked();
@@ -49,7 +50,8 @@ private slots:
     void rank_importance_toggled(bool checked);   // File メニューの Rank by Importance
 
 private:
-    void set_scatter_data(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y,const QVector<double> &yref);
+    void set_scatter_data(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y,const QVector<double> &yref,const QVector<int> &shot);
+    void highlight_shot(int shot);
     void apply_display(QCustomPlot *plot);
     void update_highlight_mask(QCustomPlot *plot);
     void refresh_plots();
@@ -83,7 +85,7 @@ private:
     };
     void update_recent_line(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y);
     QMap<QCustomPlot*,RecentGraphs> recent;
-    void detrend_xy(QVector<double> &x,QVector<double> &y,QVector<double> &yraw);
+    void detrend_xy(QVector<double> &x,QVector<double> &y,QVector<double> &yraw,QVector<int> &shot);
     void set_range_from(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y);
     QString update_binned_curve(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y);
     void set_info_text(QCustomPlot *plot,int n,const QString &best,const QFont &font);
@@ -98,9 +100,12 @@ private:
         QVector<double> x,y;
         QVector<double> yref;   // 強調の判定に使う値(トレンドグラフの値)。Detrend時も元の値
         QVector<char> hi;       // yref が閾値以上なら1
+        QVector<int> shot;      // 各点がもとのどのショット(データの添字)か。昇順
     };
     QMap<QCustomPlot*,ScatterData> scatter_xy;
     QMap<QCustomPlot*,QCPGraph*> highlight_graph;
+    QMap<QCustomPlot*,QCPGraph*> hover_graph;   // トレンドグラフで指した点に対応する散布図の点を囲む輪
+    int hover_shot = -1;
     QString signal_list_file(const QString &name);
     bool load_signal_list(QListWidget *list, const QString &name);
     void save_signal_list(QListWidget *list, const QString &name);
