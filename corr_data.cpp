@@ -377,10 +377,72 @@ bool Corr_data::calc_importance(bool use_th,double th,vector<Importance> &out,do
     return true;
 }
 
+void Corr_data::update_gap(bool use_th,double th,double hl_th,int beg,int end)
+{
+    gap_valid = false;
+    if(rank_mode!=RANK_GAP || sig.size()<2)return;
+    for(size_t i=0;i<sig.size();i++)sig[i].gap = 0;
+
+    // 使うショット(相関と同じ条件: Threshold、時間範囲)
+    vector<int> rows;
+    bool useRange = end > beg;
+    struct tm tmv;
+    for(int i=0;i<size;i++){
+        if(useRange){
+            memset(&tmv,0,sizeof(tmv));
+            tmv.tm_isdst = -1;
+            if(strptime(endtime(i).c_str(),"%Y/%m/%d %H:%M:%S",&tmv)==NULL)continue;
+            time_t t = mktime(&tmv);
+            if(!(beg < t && t < end))continue;
+        }
+        double y0 = value(sig[0].name,i);
+        if(!std::isfinite(y0))continue;
+        if(use_th && !(y0>th))continue;
+        rows.push_back(i);
+    }
+    int n = (int)rows.size();
+    if(n < 4)return;        // ショット不足: MIC順のまま
+
+    // 閾値で2群に分ける(判定は Detrend 前の元の値で行う。散布図の縦線と同じ)
+    vector<char> hi(n);
+    int n_hi = 0;
+    for(int k=0;k<n;k++){
+        hi[k] = value(sig[0].name,rows[k]) >= hl_th ? 1 : 0;
+        n_hi += hi[k];
+    }
+    int n_lo = n - n_hi;
+    if(n_hi < 2 || n_lo < 2)return;
+
+    vector<double> x(n);
+    for(int j=1;j<(int)sig.size();j++){
+        bool ok = true;
+        for(int k=0;k<n && ok;k++){
+            x[k] = value(sig[j].name,rows[k]);
+            ok = std::isfinite(x[k]);
+        }
+        if(!ok)continue;
+        if(detrend_flg)detrend(x.data(),n);
+        double sum = 0,sum_hi = 0;
+        for(int k=0;k<n;k++){
+            sum += x[k];
+            if(hi[k])sum_hi += x[k];
+        }
+        double mean = sum/n;
+        double var = 0;
+        for(int k=0;k<n;k++)var += (x[k]-mean)*(x[k]-mean);
+        double sd = sqrt(var/n);
+        if(sd<=0)continue;
+        double m_hi = sum_hi/n_hi,m_lo = (sum-sum_hi)/n_lo;
+        sig[j].gap = fabs(m_hi-m_lo)/sd;
+    }
+    sig[0].gap = 1e30;      // 基準信号が常に先頭(0位)になるようにする
+    gap_valid = true;
+}
+
 void Corr_data::update_importance(bool use_th,double th,int beg,int end)
 {
     imp_valid = false;
-    if(!rank_imp)return;
+    if(rank_mode!=RANK_IMPORTANCE)return;
     vector<Importance> imp;
     double r2 = 0;
     int nrows = 0;

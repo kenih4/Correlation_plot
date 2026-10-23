@@ -3,6 +3,7 @@
 
 #include <QMainWindow>
 #include <QTreeWidget>
+#include <QActionGroup>
 #include "corr_data.h"
 #include "qcustomplot.h"
 
@@ -47,7 +48,7 @@ private slots:
     void on_V_highlight_editingFinished();
     void detrend_toggled(bool checked);   // File メニューの Detrend
     void show_importance();     // File メニューの Importance
-    void rank_importance_toggled(bool checked);   // File メニューの Rank by Importance
+    void rank_mode_changed();       // File メニューの Rank by ... (MIC / Importance / Gap of Means)
 
 private:
     void set_scatter_data(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y,const QVector<double> &yref,const QVector<int> &shot);
@@ -75,7 +76,14 @@ private:
     QAction *detrend_act = nullptr;
     QAction *stats_act = nullptr;
     QAction *gradient_act = nullptr;
-    QAction *rank_importance_act = nullptr;
+    // 散布図の並び順(どれか1つ。排他選択): MIC / Importance(初期値) / 2群の平均の差
+    QAction *rank_mic_act = nullptr;
+    QAction *rank_imp_act = nullptr;
+    QAction *rank_gap_act = nullptr;
+    QActionGroup *rank_group = nullptr;
+    int rank_mode() const;
+    void update_rank_scores(int beg=-1,int end=-1);
+    QString last_highlight_text;
     QAction *line_act = nullptr;        // 最新3点を線でつなぐ(初期値オフ)
     QWidget *extra_container = nullptr;
     QVector<QCustomPlot*> extra_plots;

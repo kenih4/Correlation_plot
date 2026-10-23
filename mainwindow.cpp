@@ -48,10 +48,21 @@ MainWindow::MainWindow(QWidget *parent)
     line_act->setChecked(false);
     line_act->setStatusTip(tr("Draw a line through the latest 3 points of each scatter plot and the trend graph"));
 
-    rank_importance_act = new QAction(tr("&Rank by Importance"), this);
-    rank_importance_act->setCheckable(true);
-    rank_importance_act->setChecked(true);
-    rank_importance_act->setStatusTip(tr("Order the scatter plots by random forest importance instead of MIC"));
+    // 散布図の並び順。ラジオボタン相当の排他選択(QActionGroup)
+    rank_mic_act = new QAction(tr("Rank by &MIC"), this);
+    rank_imp_act = new QAction(tr("Rank by &Importance"), this);
+    rank_gap_act = new QAction(tr("Rank by &Gap of Means"), this);
+    rank_mic_act->setStatusTip(tr("Order the scatter plots by MIC"));
+    rank_imp_act->setStatusTip(tr("Order the scatter plots by random forest importance"));
+    rank_gap_act->setStatusTip(tr("Order the scatter plots by the gap between the two Highlight means (divided by the standard deviation)"));
+    rank_group = new QActionGroup(this);
+    rank_group->setExclusive(true);
+    for(QAction *a : {rank_mic_act,rank_imp_act,rank_gap_act}){
+        a->setCheckable(true);
+        rank_group->addAction(a);
+    }
+    rank_imp_act->setChecked(true);
+
     int status = db_init();
     cerr << "#### DB Init : " << status << endl;
     if(DB_OK != status)
@@ -103,7 +114,7 @@ MainWindow::MainWindow(QWidget *parent)
     corrdata = new Corr_data(ui->spinBox->value(),ui->checkBox_calc->checkState());
     corrdata->set_stats(stats_act->isChecked());
     corrdata->set_detrend(detrend_act->isChecked());
-    corrdata->set_rank_importance(rank_importance_act->isChecked());
+    corrdata->set_rank_mode(rank_mode());
     createActions();
     createStatusBar();
     ui->radioButton->setChecked(true);
@@ -290,7 +301,7 @@ void MainWindow::on_pushButton_clicked()
     corrdata = new Corr_data(ui->spinBox->value(),ui->checkBox_calc->checkState());
     corrdata->set_stats(stats_act->isChecked());
     corrdata->set_detrend(detrend_act->isChecked());
-    corrdata->set_rank_importance(rank_importance_act->isChecked());
+    corrdata->set_rank_mode(rank_mode());
 
     for(int i= 0;i<ui->listWidget->count();++i){
         corrdata->add_signal(ui->listWidget->item(i)->text().toStdString().c_str());
@@ -319,7 +330,7 @@ void MainWindow::on_pushButton_clicked()
     }else{
         corrdata->calc_mic();
     }
-    corrdata->update_importance(ui->checkBox_th->checkState()==Qt::Checked,ui->V_threshold->text().toDouble());
+    update_rank_scores();
     for(int j=0;corr_debug() && j<corrdata->sig_size();j++){
         DLOG<<" "<<j<<"  "<<
               corrdata->sig_name(j)<<"  "<<
@@ -484,10 +495,13 @@ void MainWindow::set_info_text(QCustomPlot *plot,int n,const QString &best,const
     double mic = corrdata->mic(n);
     b.text->setVisible(true);
     b.text->setFont(font);
-    // 重要度順のときは重要度[%]を併記する
+    // 重要度順のときは重要度[%]、平均の差順のときは差(標準偏差単位)を併記する
     QString impLine;
     if(corrdata->rank_importance()){
         impLine = QString("\nimp : %1 %").arg(corrdata->importance(n)*100,0,'f',1);
+    }
+    if(corrdata->rank_gap()){
+        impLine = QString("\ngap : %1 sd").arg(corrdata->gap(n),0,'f',2);
     }
     if(!stats_act->isChecked()){
         b.text->setText(QString("mic : %1").arg(mic,0,'f',3) + impLine);
@@ -843,7 +857,8 @@ QString MainWindow::calc_signature()
           << QString::number(ui->checkBox_calc->checkState())
           << QString::number(detrend_act->isChecked())
           << QString::number(stats_act->isChecked())
-          << QString::number(rank_importance_act->isChecked())
+          << QString::number(rank_mode())
+          << (rank_mode()==Corr_data::RANK_GAP ? ui->V_highlight->text() : QString())
           << QString::number(ui->checkBox_fix->checkState())
           << QString::number(ui->checkBox_add->checkState())
           << QString::number(ui->spinBox->value());
@@ -870,7 +885,7 @@ void MainWindow::refresh_plots()
     }else{
         corrdata->calc_mic();
     }
-    corrdata->update_importance(ui->checkBox_th->checkState()==Qt::Checked,ui->V_threshold->text().toDouble());
+    update_rank_scores();
     bool b = ui->checkBox_fix->checkState()!=Qt::Checked;
     plot_data(ui->widget_1,corrdata->get_ranking(1,b));
     plot_data(ui->widget_2,corrdata->get_ranking(2,b));
@@ -888,9 +903,32 @@ void MainWindow::stats_toggled(bool checked)
     refresh_plots();
 }
 
-void MainWindow::rank_importance_toggled(bool checked)
+int MainWindow::rank_mode() const
 {
-    corrdata->set_rank_importance(checked);
+    if(rank_gap_act->isChecked())return Corr_data::RANK_GAP;
+    if(rank_imp_act->isChecked())return Corr_data::RANK_IMPORTANCE;
+    return Corr_data::RANK_MIC;
+}
+
+// 並び順に使う指標(重要度、または2群の平均の差)を更新する。選ばれている方だけ計算する。
+// beg<end なら時間範囲の表示用(Threshold は使わない)。
+void MainWindow::update_rank_scores(int beg,int end)
+{
+    double hl = ui->V_highlight->text().toDouble();
+    if(beg<end){
+        corrdata->update_importance(false,0,beg,end);
+        corrdata->update_gap(false,0,hl,beg,end);
+    }else{
+        bool useTh = ui->checkBox_th->checkState()==Qt::Checked;
+        double th = ui->V_threshold->text().toDouble();
+        corrdata->update_importance(useTh,th);
+        corrdata->update_gap(useTh,th,hl);
+    }
+}
+
+void MainWindow::rank_mode_changed()
+{
+    corrdata->set_rank_mode(rank_mode());
     corrdata->rank_init();      // Fix で保持している順位も作り直す
     refresh_plots();
 }
@@ -1056,7 +1094,7 @@ void MainWindow::init_highlight_threshold()
     if(n==0)return;
     highlight_initialized = true;
     ui->V_highlight->setText(QString::number(sum/n,'g',5));
-    if(ui->checkBox_highlight->isChecked())on_V_highlight_editingFinished();
+    on_V_highlight_editingFinished();
 }
 
 void MainWindow::line_toggled(bool)
@@ -1080,6 +1118,13 @@ void MainWindow::on_V_highlight_editingFinished()
         apply_display(it.key());
         it.key()->replot();
     }
+    // 平均の差順のときは、閾値が変わると順位も変わる
+    QString now = ui->V_highlight->text();
+    if(rank_mode()==Corr_data::RANK_GAP && now!=last_highlight_text){
+        corrdata->rank_init();
+        refresh_plots();
+    }
+    last_highlight_text = now;
 }
 
 void MainWindow::plot_data(QCustomPlot *plot,int n)
@@ -1270,7 +1315,7 @@ void MainWindow::update_data()
     }else{
         corrdata->calc_mic();
     }
-    corrdata->update_importance(ui->checkBox_th->checkState()==Qt::Checked,ui->V_threshold->text().toDouble());
+    update_rank_scores();
     if(cnt>0 && corr_debug())
         for(int j=0;j<corrdata->sig_size();j++){
             DLOG<<" "<<j<<"  "<<
@@ -1337,8 +1382,11 @@ void MainWindow::createActions()
     fileMenu->addAction(importanceAct);
 
     fileMenu->addSeparator();
-    fileMenu->addAction(rank_importance_act);
-    connect(rank_importance_act, &QAction::toggled, this, &MainWindow::rank_importance_toggled);
+    fileMenu->addAction(rank_mic_act);
+    fileMenu->addAction(rank_imp_act);
+    fileMenu->addAction(rank_gap_act);
+    connect(rank_group, &QActionGroup::triggered, this, &MainWindow::rank_mode_changed);
+    fileMenu->addSeparator();
     fileMenu->addAction(detrend_act);
     connect(detrend_act, &QAction::toggled, this, &MainWindow::detrend_toggled);
     fileMenu->addAction(stats_act);
@@ -1414,7 +1462,7 @@ void MainWindow::on_pushButton_3_clicked()
     }
     DLOG<<beg<<"   "<<end<<endl;
     corrdata->calc_mic(beg,end);
-    corrdata->update_importance(false,0,beg,end);
+    update_rank_scores(beg,end);
     DLOG<<beg<<"   "<<end<<endl;
 
     plot_data(ui->widget_1,corrdata->get_ranking(1),beg,end);

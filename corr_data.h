@@ -40,6 +40,7 @@ typedef struct Signal_param{
     double pval;        // rho の並べ替え検定のp値
     double mic_null;    // 無相関のときのMICの95パーセンタイル(同じデータ数)
     double importance;  // ランダムフォレストの重要度(基準信号は最大値)。重要度順の表示のときだけ計算する
+    double gap;         // 閾値以上/未満の2群の平均の差 / 標準偏差(基準信号は最大値)。平均の差順の表示のときだけ計算する
     bool operator==(const Signal_param &other) const {
         return name == other.name;
     }
@@ -60,13 +61,13 @@ public:
     void get_tag(string endtime);
     void get_tag(string begtime,string endtime);
     void add_signal(string signal){
-        Signal_param s = {signal,0,0,1,0,0};
+        Signal_param s = {signal,0,0,1,0,0,0};
         if(find(sig.begin(),sig.end(),s)==sig.end()){
             sig.push_back(s);
         }
     };
     void add_signal_d(string signal){
-        Signal_param s = {signal,0,0,1,0,0};
+        Signal_param s = {signal,0,0,1,0,0,0};
         if(find(sig_d.begin(),sig_d.end(),s)==sig_d.end()){
             sig_d.push_back(s);
         }
@@ -119,10 +120,15 @@ public:
     // 基準信号 sig[0] を目的変数、他の全信号を説明変数としてランダムフォレストの重要度を求める。
     // 相関と同じ条件(Threshold、Detrend)でショットを選ぶ。成功したら true。
     bool calc_importance(bool use_th,double th,vector<Importance> &out,double &oob_r2,int &nrows,int beg=-1,int end=-1);
-    // 散布図を重要度順に並べるか。オンのとき update_importance() で各信号の重要度を更新する
-    void set_rank_importance(bool f){rank_imp = f;imp_valid = false;};
-    bool rank_importance(){return rank_imp && imp_valid;};
+    // 散布図の並び順: MIC順 / 重要度順 / 閾値で分けた2群の平均の差順
+    enum RankMode{RANK_MIC=0,RANK_IMPORTANCE=1,RANK_GAP=2};
+    void set_rank_mode(int m){rank_mode = m;imp_valid = false;gap_valid = false;};
+    bool rank_importance(){return rank_mode==RANK_IMPORTANCE && imp_valid;};
+    bool rank_gap(){return rank_mode==RANK_GAP && gap_valid;};
     void update_importance(bool use_th,double th,int beg=-1,int end=-1);
+    // 基準信号の値が hl_th 以上/未満の2群に分け、各信号の値の平均の差(標準偏差で割る)を求める
+    void update_gap(bool use_th,double th,double hl_th,int beg=-1,int end=-1);
+    double gap(int n){return sig[n].gap;};
     double importance(int n){return sig[n].importance;};
     void set_flg(int f){dflg = f;DLOG<<dflg<<endl;};
     void outfile(string);
@@ -139,9 +145,14 @@ private:
     unsigned ver = 0;
     void calc_mic_rows(const vector<int> &rows);
     void set_self_stats();      // 基準信号自身の指標(MIC=1など)。計算せず固定値にする
-    bool rank_imp = false;      // 順位を重要度で決めるか
+    int rank_mode = RANK_MIC;   // 順位の決め方
+    bool gap_valid = false;     // 平均の差が計算できているか
     bool imp_valid = false;     // 重要度が計算できているか(データ不足のときはMIC順に戻す)
-    double score(int i){return (rank_imp && imp_valid) ? sig[i].importance : sig[i].coefficient;}
+    double score(int i){
+        if(rank_mode==RANK_IMPORTANCE && imp_valid)return sig[i].importance;
+        if(rank_mode==RANK_GAP && gap_valid)return sig[i].gap;
+        return sig[i].coefficient;
+    }
     bool detrend_flg = false;   // 相関を取る前に移動平均を引いてゆっくりした変動を除くか
     bool stats_flg = false;    // rho / p値 / MICの無相関95%点を計算するか
 };
