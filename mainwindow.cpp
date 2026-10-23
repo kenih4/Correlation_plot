@@ -1106,8 +1106,13 @@ void MainWindow::line_toggled(bool)
 }
 
 // Highlight の切り替え/閾値の変更は、保持しているデータで表示だけ描き直す
-void MainWindow::on_checkBox_highlight_toggled(bool)
+void MainWindow::on_checkBox_highlight_toggled(bool checked)
 {
+    // Highlight をオンにしたら、並び順を「Gap of Means」にする(オフに戻しても並び順はそのまま)
+    if(checked && !rank_gap_act->isChecked()){
+        rank_gap_act->setChecked(true);     // 排他グループなので他の選択は外れる
+        rank_mode_changed();                // 並び順を変えて描き直す
+    }
     on_V_highlight_editingFinished();
 }
 
