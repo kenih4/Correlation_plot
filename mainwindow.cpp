@@ -735,7 +735,7 @@ void MainWindow::apply_display(QCustomPlot *plot)
     apply_shape(plot);
 }
 
-// 点の形(信号名に「/phase」を含む散布図はひし形、それ以外は丸)を、点を描くすべてのグラフに反映する。
+// 点の形(横軸の信号名に「/phase」を含む散布図はひし形、それ以外は丸)を、点を描くすべてのグラフに反映する。
 // 色やサイズはそのままで、形だけを変える。
 void MainWindow::apply_shape(QCustomPlot *plot)
 {
@@ -1095,7 +1095,7 @@ void MainWindow::plot_data(QCustomPlot *plot,int n)
         y[i] = corrdata->value(name_y,i);
     }
     bool dt = detrend_act->isChecked();
-    plot_shape[plot] = (name_x.find("/phase")!=string::npos || name_y.find("/phase")!=string::npos)
+    plot_shape[plot] = (name_x.find("/phase")!=string::npos)
             ? QCPScatterStyle::ssDiamond : QCPScatterStyle::ssCircle;
     QVector<double> yraw = y;
     QVector<int> shot(x.size());
@@ -1461,7 +1461,7 @@ void MainWindow::plot_data(QCustomPlot *plot,int n,int beg,int end)
         }
     }
     bool dt = detrend_act->isChecked();
-    plot_shape[plot] = (name_x.find("/phase")!=string::npos || name_y.find("/phase")!=string::npos)
+    plot_shape[plot] = (name_x.find("/phase")!=string::npos)
             ? QCPScatterStyle::ssDiamond : QCPScatterStyle::ssCircle;
     QVector<double> yraw = y;
     if(dt)detrend_xy(x,y,yraw,shot);
