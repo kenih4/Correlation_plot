@@ -27,7 +27,7 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
 
-    // File メニューの Detrend。corrdata を作る前から状態を参照するので、先に作る(初期値はオン)
+    // File メニューの Detrend。corrdata を作る前から状態を参照するので、先に作る(初期値はオフ)
     detrend_act = new QAction(tr("&Detrend"), this);
     detrend_act->setCheckable(true);
     detrend_act->setChecked(false);
