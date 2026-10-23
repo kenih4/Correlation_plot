@@ -30,7 +30,7 @@ MainWindow::MainWindow(QWidget *parent)
     // File メニューの Detrend。corrdata を作る前から状態を参照するので、先に作る(初期値はオン)
     detrend_act = new QAction(tr("&Detrend"), this);
     detrend_act->setCheckable(true);
-    detrend_act->setChecked(true);
+    detrend_act->setChecked(false);
     detrend_act->setStatusTip(tr("Remove slow drift (subtract moving average) before computing correlation"));
 
     stats_act = new QAction(tr("&Stats"), this);

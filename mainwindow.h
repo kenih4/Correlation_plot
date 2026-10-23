@@ -72,7 +72,7 @@ private:
     void clear_plot(QCustomPlot *plot);
     void plot_extra(bool b);
     void plot_extra_range(int beg,int end);
-    // File メニューのチェック式の項目(初期値: Detrend=オン、Rank by Importance=オン、Stats=オフ、Gradient=オフ)
+    // File メニューのチェック式の項目(初期値: Detrend=オフ、Stats=オフ、Gradient=オフ)
     QAction *detrend_act = nullptr;
     QAction *stats_act = nullptr;
     QAction *gradient_act = nullptr;
