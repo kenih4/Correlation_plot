@@ -731,6 +731,36 @@ void MainWindow::update_mean_lines(QCustomPlot *plot)
 // 最新4点の色(青/紫/マゼンタ/オレンジ)は別のグラフで重ねているので、どの設定でも変わらない。
 void MainWindow::apply_display(QCustomPlot *plot)
 {
+    apply_display_impl(plot);
+    apply_shape(plot);
+}
+
+// 点の形(信号名に「/phase」を含む散布図はひし形、それ以外は丸)を、点を描くすべてのグラフに反映する。
+// 色やサイズはそのままで、形だけを変える。
+void MainWindow::apply_shape(QCustomPlot *plot)
+{
+    QCPScatterStyle::ScatterShape shape = plot_shape.value(plot,QCPScatterStyle::ssCircle);
+    auto set = [shape](QCPGraph *g){
+        if(!g)return;
+        QCPScatterStyle st = g->scatterStyle();
+        if(st.shape()==shape)return;
+        st.setShape(shape);
+        g->setScatterStyle(st);
+    };
+    for(int i=0;i<3 && i<plot->graphCount();i++)set(plot->graph(i));
+    if(recent.contains(plot)){
+        set(recent[plot].g3);
+        set(recent[plot].g4);
+    }
+    if(highlight_graph.contains(plot))set(highlight_graph[plot]);
+    if(gradient_first.contains(plot)){
+        int first = gradient_first[plot];
+        for(int b=0;b<50 && first+b<plot->graphCount();b++)set(plot->graph(first+b));
+    }
+}
+
+void MainWindow::apply_display_impl(QCustomPlot *plot)
+{
     if(!scatter_xy.contains(plot))return;
     const int GRADIENT_BINS = 50;
     ScatterData &s = scatter_xy[plot];
@@ -1065,6 +1095,8 @@ void MainWindow::plot_data(QCustomPlot *plot,int n)
         y[i] = corrdata->value(name_y,i);
     }
     bool dt = detrend_act->isChecked();
+    plot_shape[plot] = (name_x.find("/phase")!=string::npos || name_y.find("/phase")!=string::npos)
+            ? QCPScatterStyle::ssDiamond : QCPScatterStyle::ssCircle;
     QVector<double> yraw = y;
     QVector<int> shot(x.size());
     for(int i=0;i<shot.size();i++)shot[i] = i;
@@ -1073,6 +1105,7 @@ void MainWindow::plot_data(QCustomPlot *plot,int n)
     QString best = update_binned_curve(plot,x,y);
 
     set_recent_points(plot,x,y);
+    apply_shape(plot);
 
     if(dt){
         set_range_from(plot,x,y);
@@ -1428,6 +1461,8 @@ void MainWindow::plot_data(QCustomPlot *plot,int n,int beg,int end)
         }
     }
     bool dt = detrend_act->isChecked();
+    plot_shape[plot] = (name_x.find("/phase")!=string::npos || name_y.find("/phase")!=string::npos)
+            ? QCPScatterStyle::ssDiamond : QCPScatterStyle::ssCircle;
     QVector<double> yraw = y;
     if(dt)detrend_xy(x,y,yraw,shot);
     set_scatter_data(plot,x,y,yraw,shot);

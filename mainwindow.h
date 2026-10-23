@@ -53,6 +53,9 @@ private:
     void set_scatter_data(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y,const QVector<double> &yref,const QVector<int> &shot);
     void highlight_shot(int shot);
     void apply_display(QCustomPlot *plot);
+    void apply_display_impl(QCustomPlot *plot);
+    void apply_shape(QCustomPlot *plot);
+    QMap<QCustomPlot*,QCPScatterStyle::ScatterShape> plot_shape;   // 散布図ごとの点の形
     void update_highlight_mask(QCustomPlot *plot);
     void init_highlight_threshold();
     bool highlight_initialized = false;
