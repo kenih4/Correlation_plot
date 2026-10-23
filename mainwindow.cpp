@@ -624,6 +624,10 @@ void MainWindow::clear_plot(QCustomPlot *plot)
         if(binned[plot].err)binned[plot].err->data().clear();
     }
     if(recent.contains(plot) && recent[plot].line)recent[plot].line->setVisible(false);
+    if(mean_lines.contains(plot)){
+        if(mean_lines[plot].hi)mean_lines[plot].hi->setVisible(false);
+        if(mean_lines[plot].lo)mean_lines[plot].lo->setVisible(false);
+    }
     scatter_xy.remove(plot);
     plot->xAxis->setLabel(QString());
     plot->yAxis->setLabel(QString());
@@ -684,6 +688,40 @@ void MainWindow::update_highlight_mask(QCustomPlot *plot)
     }
 }
 
+// Highlight 中は、散布図に縦線を引く。
+//   赤   : 閾値以上の点の x (横軸の信号) の平均
+//   灰色 : 閾値未満の点の x の平均
+// トレンドグラフは対象外(横軸が時刻のため)。該当する点がなければその線は出さない。
+void MainWindow::update_mean_lines(QCustomPlot *plot)
+{
+    MeanLines &m = mean_lines[plot];
+    bool hl = ui->checkBox_highlight->isChecked();
+    if(plot==ui->widget || !hl || !scatter_xy.contains(plot)){
+        if(m.hi)m.hi->setVisible(false);
+        if(m.lo)m.lo->setVisible(false);
+        return;
+    }
+    const ScatterData &s = scatter_xy[plot];
+    double sum_hi = 0,sum_lo = 0;
+    int n_hi = 0,n_lo = 0;
+    for(int i=0;i<s.x.size();i++){
+        if(!std::isfinite(s.x[i]))continue;
+        if(s.hi[i]){sum_hi += s.x[i];n_hi++;}
+        else{sum_lo += s.x[i];n_lo++;}
+    }
+    auto place = [plot](QCPItemStraightLine *&line,const QColor &col,bool show,double xv){
+        if(!line){
+            line = new QCPItemStraightLine(plot);
+            line->setPen(QPen(col,1.5));
+        }
+        line->point1->setCoords(xv,0);
+        line->point2->setCoords(xv,1);
+        line->setVisible(show);
+    };
+    place(m.hi,QColor(Qt::red),n_hi>0,n_hi>0 ? sum_hi/n_hi : 0);
+    place(m.lo,QColor(150,150,150),n_lo>0,n_lo>0 ? sum_lo/n_lo : 0);
+}
+
 // 点の色を決めて表示する。
 //   通常      : 全点を赤(graph(0))
 //   Gradient  : 最古=赤 → 最新=青 のグラデーション。1点ごとの色指定はできないので、
@@ -726,6 +764,7 @@ void MainWindow::apply_display(QCustomPlot *plot)
     }else if(highlight_graph.contains(plot) && highlight_graph[plot]){
         highlight_graph[plot]->setVisible(false);
     }
+    update_mean_lines(plot);
 
     // グラデーション用のグラフは、その後ろ(最初に作った時点の末尾)に追加する
     if(grad && !gradient_first.contains(plot)){
