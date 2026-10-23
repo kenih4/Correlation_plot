@@ -335,6 +335,7 @@ void MainWindow::on_pushButton_clicked()
     plot_extra(true);
     plot_trend(ui->widget);
     mark_calculated();
+    init_highlight_threshold();
     corrdata->outfile(CSV_FILE);
 
 }
@@ -1005,6 +1006,27 @@ void MainWindow::gradient_toggled(bool)
         apply_display(it.key());
         it.key()->replot();
     }
+}
+
+// 起動後、最初に取得できたデータの平均(トレンドグラフの値の平均)を Highlight の閾値の初期値にする。
+// 2回目以降の取得では、ユーザーが変えた値を上書きしない。
+void MainWindow::init_highlight_threshold()
+{
+    if(highlight_initialized)return;
+    double sum = 0;
+    int n = 0;
+    const string &name0 = corrdata->sig_name(0);
+    for(int i=0;i<corrdata->data_size();i++){
+        if(corrdata->begtime(i).empty())continue;       // 取得できていない空のショットは除く
+        double v = corrdata->value(name0,i);
+        if(!std::isfinite(v))continue;
+        sum += v;
+        n++;
+    }
+    if(n==0)return;
+    highlight_initialized = true;
+    ui->V_highlight->setText(QString::number(sum/n,'g',5));
+    if(ui->checkBox_highlight->isChecked())on_V_highlight_editingFinished();
 }
 
 void MainWindow::line_toggled(bool)

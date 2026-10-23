@@ -54,6 +54,8 @@ private:
     void highlight_shot(int shot);
     void apply_display(QCustomPlot *plot);
     void update_highlight_mask(QCustomPlot *plot);
+    void init_highlight_threshold();
+    bool highlight_initialized = false;
     void update_mean_lines(QCustomPlot *plot);
     struct MeanLines{
         QCPItemStraightLine *hi = nullptr;  // 閾値以上の点の x の平均(赤)
