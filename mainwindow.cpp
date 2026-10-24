@@ -560,6 +560,40 @@ void MainWindow::set_recent_points(QCustomPlot *plot,const QVector<double> &x,co
     update_recent_mean(plot,x,y);
 }
 
+// settings.ini の値を文字列で読む。QSettings は行の途中のコメントを扱えず、カンマを含む値は
+// リストになるので、「;」「#」以降を取り除き、リストはカンマでつなぎ直して返す。
+static QString ini_string(QSettings &st,const QString &key,const QString &def)
+{
+    if(!st.contains(key))return def;
+    QVariant var = st.value(key);
+    QString s = (var.metaType().id()==QMetaType::QStringList) ? var.toStringList().join(",") : var.toString();
+    int cut = s.indexOf(QRegularExpression("[;#]"));
+    if(cut>=0)s = s.left(cut);
+    return s.trimmed();
+}
+
+// Highlight の閾値を、基準信号の値 v から決める。
+//   percentile : 値を小さい順に並べた value パーセンタイル(例:75 なら上位25%が閾値以上)。線形補間
+//   sigma      : 平均 + value × 標準偏差
+//   fixed      : value そのもの
+static double compute_highlight_threshold(std::vector<double> v,const QString &method,double value)
+{
+    int n = (int)v.size();
+    if(method=="fixed")return value;
+    if(method=="sigma"){
+        double sum = 0;
+        for(int i=0;i<n;i++)sum += v[i];
+        double mean = sum/n,var = 0;
+        for(int i=0;i<n;i++)var += (v[i]-mean)*(v[i]-mean);
+        return mean + value*sqrt(var/n);
+    }
+    std::sort(v.begin(),v.end());
+    double p = std::min(100.0,std::max(0.0,value));
+    double pos = p/100.0*(n-1);
+    int lo = (int)floor(pos),hi = (int)ceil(pos);
+    return v[lo] + (v[hi]-v[lo])*(pos-lo);
+}
+
 // 十字印の平均に使う最新のショット数。
 // 設定ファイル ~/.config/Correlation_plot/settings.ini の
 //   [LatestMean]
@@ -576,7 +610,7 @@ int MainWindow::latest_mean_shots()
         if(fi.exists()){
             QSettings st(fi.absoluteFilePath(),QSettings::IniFormat);
             bool ok = false;
-            int n = st.value("LatestMean/shots",5).toInt(&ok);
+            int n = ini_string(st,"LatestMean/shots","5").toInt(&ok);
             if(ok && n>=1 && n<=1000)mean_shots = n;
             else DLOG << "settings.ini: invalid LatestMean/shots, using 5" << endl;
             DLOG << "Load settings : " << fi.absoluteFilePath().toStdString()
@@ -1063,7 +1097,7 @@ void MainWindow::check_config_files()
         {"signals.txt",             "信号リスト(既定の8信号を使用)"},
         {"signals_denominator.txt", "分母の信号リスト(既定の2信号を使用)"},
         {"mean_label_signals.txt",  "平均値の数値を出す信号(すべての信号に出す)"},
-        {"settings.ini",            "最新ショットの平均に使うショット数など(5ショットを使用)"},
+        {"settings.ini",            "最新ショットの平均のショット数、Highlight の閾値の決め方(最新5ショット、上位25%を使用)"},
     };
     QStringList missing;
     for(const Item &it : items){
@@ -1236,19 +1270,44 @@ void MainWindow::gradient_toggled(bool)
 void MainWindow::init_highlight_threshold()
 {
     if(highlight_initialized)return;
-    double sum = 0;
-    int n = 0;
+    std::vector<double> vals;
     const string &name0 = corrdata->sig_name(0);
     for(int i=0;i<corrdata->data_size();i++){
         if(corrdata->begtime(i).empty())continue;       // 取得できていない空のショットは除く
         double v = corrdata->value(name0,i);
         if(!std::isfinite(v))continue;
-        sum += v;
-        n++;
+        vals.push_back(v);
     }
-    if(n==0)return;
+    if(vals.empty())return;
     highlight_initialized = true;
-    ui->V_highlight->setText(QString::number(sum/n,'g',5));
+
+    // 決め方は settings.ini の [Highlight] method / value で選ぶ(既定: percentile 75 = 上位25%)
+    QString method = "percentile";
+    double value = 75;
+    QFileInfo fi(signal_list_file("settings.ini"));
+    if(fi.exists()){
+        QSettings st(fi.absoluteFilePath(),QSettings::IniFormat);
+        QString m = ini_string(st,"Highlight/method","percentile").toLower();
+        bool ok = false;
+        double val = ini_string(st,"Highlight/value","").toDouble(&ok);
+        if(m=="percentile" || m=="sigma" || m=="fixed"){
+            if(ok){
+                method = m;
+                value = val;
+            }else if(m=="sigma"){
+                method = m;
+                value = 1;      // k の既定
+            }else if(st.contains("Highlight/value")){
+                cerr << "WARNING: settings.ini Highlight/value is invalid; using percentile 75" << endl;
+            }
+        }else{
+            cerr << "WARNING: settings.ini Highlight/method must be percentile, sigma or fixed; using percentile 75" << endl;
+        }
+    }
+    double th = compute_highlight_threshold(vals,method,value);
+    DLOG << "Highlight threshold : method=" << method.toStdString() << " value=" << value
+         << " -> " << th << " (" << vals.size() << " shots)" << endl;
+    ui->V_highlight->setText(QString::number(th,'g',5));
     on_V_highlight_editingFinished();
 }
 
