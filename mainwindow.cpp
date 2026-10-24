@@ -749,7 +749,6 @@ void MainWindow::update_mean_lines(QCustomPlot *plot)
         m.hi_text->setBrush(QBrush(QColor(255,255,255,200)));
         QFont f = font();
         f.setPointSize(9);
-        f.setBold(true);
         m.hi_text->setFont(f);
     }
     if(n_hi>0)m.hi_text->setText(QString("mean(>=) : %1").arg(sum_hi/n_hi,0,'g',5));
