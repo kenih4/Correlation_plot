@@ -50,6 +50,7 @@ private slots:
     void on_V_highlight_editingFinished();
     void detrend_toggled(bool checked);   // File メニューの Detrend
     void show_importance();     // File メニューの Importance
+    void check_config_files();  // 起動時に設定ファイルの有無を確認して警告する
     void rank_mode_changed();       // File メニューの Rank by ... (MIC / Importance / Gap of Means)
 
 private:

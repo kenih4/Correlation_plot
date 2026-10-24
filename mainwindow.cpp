@@ -148,6 +148,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     // 起動時に Get ボタンを押す(ウィンドウ表示後にDB取得を始めるため、イベントループに載せる)
     QTimer::singleShot(0, ui->pushButton, SLOT(click()));
+    QTimer::singleShot(0, this, SLOT(check_config_files()));
 }
 
 QString MainWindow::signal_list_file(const QString &name)
@@ -988,6 +989,35 @@ void MainWindow::detrend_toggled(bool checked)
 {
     corrdata->set_detrend(checked);
     refresh_plots();
+}
+
+// 起動時に ~/.config/Correlation_plot の設定ファイルを確認し、無いものがあれば警告する。
+// 無くても既定の設定で動く。ダイアログは操作を止めない(Get などは裏で続く)。
+void MainWindow::check_config_files()
+{
+    struct Item{const char *file;const char *meaning;};
+    const Item items[] = {
+        {"signals.txt",             "信号リスト(既定の8信号を使用)"},
+        {"signals_denominator.txt", "分母の信号リスト(既定の2信号を使用)"},
+        {"mean_label_signals.txt",  "平均値の数値を出す信号(すべての信号に出す)"},
+    };
+    QStringList missing;
+    for(const Item &it : items){
+        if(!QFile::exists(signal_list_file(it.file))){
+            missing << QString("  %1 : %2").arg(it.file).arg(QString::fromUtf8(it.meaning));
+        }
+    }
+    if(missing.isEmpty())return;
+
+    QString dir = QFileInfo(signal_list_file("signals.txt")).absolutePath();
+    QString text = QString("設定ファイルが見つかりません。既定の設定で動作します。\n\n保存先: %1\n\n%2\n\n"
+                           "信号リストは、リストを変更すると自動で保存されます。")
+            .arg(dir).arg(missing.join("\n"));
+    cerr << "WARNING: config file(s) not found in " << dir.toStdString() << endl;
+    statusBar()->showMessage(tr("Config file(s) not found: using defaults"));
+    QMessageBox *box = new QMessageBox(QMessageBox::Warning,"Correlation Plot",text,QMessageBox::Ok,this);
+    box->setAttribute(Qt::WA_DeleteOnClose);
+    box->open();        // 閉じるまでこのウィンドウは操作できないが、処理(Getなど)は止めない
 }
 
 // 全信号を同時に使ったランダムフォレストの重要度を表にして出す。
