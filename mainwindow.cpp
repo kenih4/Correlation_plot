@@ -48,6 +48,11 @@ MainWindow::MainWindow(QWidget *parent)
     line_act->setChecked(false);
     line_act->setStatusTip(tr("Draw a line through the latest 3 points of each scatter plot and the trend graph"));
 
+    mean5_act = new QAction(tr("Show &Mean of Latest 5 Shots"), this);
+    mean5_act->setCheckable(true);
+    mean5_act->setChecked(false);
+    mean5_act->setStatusTip(tr("Mark the mean (x and y) of the latest 5 shots with a cross on each scatter plot"));
+
     // 散布図の並び順。ラジオボタン相当の排他選択(QActionGroup)
     rank_mic_act = new QAction(tr("Rank by &MIC"), this);
     rank_imp_act = new QAction(tr("Rank by &Importance"), this);
@@ -551,6 +556,35 @@ void MainWindow::set_recent_points(QCustomPlot *plot,const QVector<double> &x,co
     pick(r.g4,4);
     r.range_mode = false;
     update_recent_line(plot,x,y);
+    update_recent_mean(plot,x,y);
+}
+
+// 最新5ショットの平均((横軸の平均, 縦軸の平均))を十字印(+)で示す。散布図だけが対象(トレンドは対象外)。
+// 5ショットに満たないときは出さない。
+void MainWindow::update_recent_mean(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y)
+{
+    if(plot==ui->widget)return;
+    RecentGraphs &r = recent[plot];
+    const int N = 5;
+    bool on = mean5_act->isChecked() && !r.range_mode && x.size()>=N && y.size()>=N;
+    if(!on){
+        if(r.mean5)r.mean5->setVisible(false);
+        return;
+    }
+    if(!r.mean5){
+        r.mean5 = plot->addGraph();
+        r.mean5->setLineStyle(QCPGraph::lsNone);
+        r.mean5->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssPlus,QPen(Qt::black,2.5),QBrush(Qt::NoBrush),18));
+        r.mean5->setLayer("overlay");       // 他の点より手前に描く
+    }
+    double sx = 0,sy = 0;
+    for(int k=0;k<N;k++){
+        sx += x[x.size()-1-k];
+        sy += y[y.size()-1-k];
+    }
+    QVector<double> mx(1,sx/N),my(1,sy/N);
+    r.mean5->setData(mx,my);
+    r.mean5->setVisible(true);
 }
 
 // 最新3点(古い順に 3番目 → 2番目 → 最新)を線でつなぐ。散布図とトレンドグラフの両方が対象。
@@ -587,6 +621,7 @@ void MainWindow::hide_recent_points(QCustomPlot *plot)
     }
     recent[plot].range_mode = true;
     if(recent[plot].line)recent[plot].line->setVisible(false);
+    if(recent[plot].mean5)recent[plot].mean5->setVisible(false);
 }
 
 // 散布図を6つ追加した領域(初期は非表示)を作る。File メニューの More Scatter Plots で開閉する
@@ -640,6 +675,7 @@ void MainWindow::clear_plot(QCustomPlot *plot)
         if(binned[plot].err)binned[plot].err->data().clear();
     }
     if(recent.contains(plot) && recent[plot].line)recent[plot].line->setVisible(false);
+    if(recent.contains(plot) && recent[plot].mean5)recent[plot].mean5->setVisible(false);
     if(mean_lines.contains(plot)){
         if(mean_lines[plot].hi)mean_lines[plot].hi->setVisible(false);
         if(mean_lines[plot].lo)mean_lines[plot].lo->setVisible(false);
@@ -1188,6 +1224,14 @@ void MainWindow::init_highlight_threshold()
     on_V_highlight_editingFinished();
 }
 
+void MainWindow::mean5_toggled(bool)
+{
+    for(auto it = scatter_xy.begin(); it != scatter_xy.end(); ++it){
+        update_recent_mean(it.key(),it.value().x,it.value().y);
+        it.key()->replot();
+    }
+}
+
 void MainWindow::line_toggled(bool)
 {
     for(auto it = scatter_xy.begin(); it != scatter_xy.end(); ++it){
@@ -1492,6 +1536,8 @@ void MainWindow::createActions()
     connect(gradient_act, &QAction::toggled, this, &MainWindow::gradient_toggled);
     fileMenu->addAction(line_act);
     connect(line_act, &QAction::toggled, this, &MainWindow::line_toggled);
+    fileMenu->addAction(mean5_act);
+    connect(mean5_act, &QAction::toggled, this, &MainWindow::mean5_toggled);
 
     QAction *extraAct = new QAction(tr("&More Scatter Plots (12)"), this);
     extraAct->setCheckable(true);
