@@ -642,6 +642,7 @@ void MainWindow::clear_plot(QCustomPlot *plot)
     if(mean_lines.contains(plot)){
         if(mean_lines[plot].hi)mean_lines[plot].hi->setVisible(false);
         if(mean_lines[plot].lo)mean_lines[plot].lo->setVisible(false);
+        if(mean_lines[plot].hi_text)mean_lines[plot].hi_text->setVisible(false);
     }
     scatter_xy.remove(plot);
     plot->xAxis->setLabel(QString());
@@ -714,6 +715,7 @@ void MainWindow::update_mean_lines(QCustomPlot *plot)
     if(plot==ui->widget || !hl || !scatter_xy.contains(plot)){
         if(m.hi)m.hi->setVisible(false);
         if(m.lo)m.lo->setVisible(false);
+        if(m.hi_text)m.hi_text->setVisible(false);
         return;
     }
     const ScatterData &s = scatter_xy[plot];
@@ -735,6 +737,23 @@ void MainWindow::update_mean_lines(QCustomPlot *plot)
     };
     place(m.hi,QColor(Qt::red),n_hi>0,n_hi>0 ? sum_hi/n_hi : 0);
     place(m.lo,QColor(150,150,150),n_lo>0,n_lo>0 ? sum_lo/n_lo : 0);
+
+    // 赤い線(閾値以上の平均値)の数値を左下に表示する
+    if(!m.hi_text){
+        m.hi_text = new QCPItemText(plot);
+        m.hi_text->setPositionAlignment(Qt::AlignBottom|Qt::AlignLeft);
+        m.hi_text->position->setType(QCPItemPosition::ptAxisRectRatio);
+        m.hi_text->position->setCoords(0.02,0.98);
+        m.hi_text->setColor(QColor(Qt::red));
+        m.hi_text->setPen(Qt::NoPen);
+        m.hi_text->setBrush(QBrush(QColor(255,255,255,200)));
+        QFont f = font();
+        f.setPointSize(9);
+        f.setBold(true);
+        m.hi_text->setFont(f);
+    }
+    if(n_hi>0)m.hi_text->setText(QString("mean(>=) : %1").arg(sum_hi/n_hi,0,'g',5));
+    m.hi_text->setVisible(n_hi>0);
 }
 
 // 点の色を決めて表示する。
