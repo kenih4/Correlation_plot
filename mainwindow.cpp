@@ -7,6 +7,7 @@
 #include <QFileInfo>
 #include <QTextStream>
 #include <QDebug>
+#include <QSettings>
 #include <QGridLayout>
 #include <QScreen>
 #include <QDialog>
@@ -48,10 +49,10 @@ MainWindow::MainWindow(QWidget *parent)
     line_act->setChecked(false);
     line_act->setStatusTip(tr("Draw a line through the latest 3 points of each scatter plot and the trend graph"));
 
-    mean5_act = new QAction(tr("Show &Mean of Latest 5 Shots"), this);
+    mean5_act = new QAction(tr("Show &Mean of Latest Shots"), this);
     mean5_act->setCheckable(true);
     mean5_act->setChecked(false);
-    mean5_act->setStatusTip(tr("Mark the mean (x and y) of the latest 5 shots with a cross on each scatter plot"));
+    mean5_act->setStatusTip(tr("Mark the mean (x and y) of the latest N shots with a cross on each scatter plot (N: settings.ini LatestMean/shots, default 5)"));
 
     // 散布図の並び順。ラジオボタン相当の排他選択(QActionGroup)
     rank_mic_act = new QAction(tr("Rank by &MIC"), this);
@@ -559,13 +560,39 @@ void MainWindow::set_recent_points(QCustomPlot *plot,const QVector<double> &x,co
     update_recent_mean(plot,x,y);
 }
 
-// 最新5ショットの平均((横軸の平均, 縦軸の平均))を十字印(+)で示す。散布図だけが対象(トレンドは対象外)。
-// 5ショットに満たないときは出さない。
+// 十字印の平均に使う最新のショット数。
+// 設定ファイル ~/.config/Correlation_plot/settings.ini の
+//   [LatestMean]
+//   shots=5
+// から読む(1〜1000。無い/不正なときは5)。更新日時が変わったら読み直す(再起動不要)。
+int MainWindow::latest_mean_shots()
+{
+    QFileInfo fi(signal_list_file("settings.ini"));
+    QDateTime mt = fi.exists() ? fi.lastModified() : QDateTime();
+    if(!settings_loaded || mt!=settings_mtime){
+        settings_loaded = true;
+        settings_mtime = mt;
+        mean_shots = 5;
+        if(fi.exists()){
+            QSettings st(fi.absoluteFilePath(),QSettings::IniFormat);
+            bool ok = false;
+            int n = st.value("LatestMean/shots",5).toInt(&ok);
+            if(ok && n>=1 && n<=1000)mean_shots = n;
+            else DLOG << "settings.ini: invalid LatestMean/shots, using 5" << endl;
+            DLOG << "Load settings : " << fi.absoluteFilePath().toStdString()
+                 << "  (LatestMean/shots=" << mean_shots << ")" << endl;
+        }
+    }
+    return mean_shots;
+}
+
+// 最新Nショット(Nは settings.ini の LatestMean/shots、既定5)の平均((横軸の平均, 縦軸の平均))を十字印(+)で示す。
+// 散布図だけが対象(トレンドは対象外)。Nショットに満たないときは出さない。
 void MainWindow::update_recent_mean(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y)
 {
     if(plot==ui->widget)return;
     RecentGraphs &r = recent[plot];
-    const int N = 5;
+    const int N = latest_mean_shots();
     bool on = mean5_act->isChecked() && !r.range_mode && x.size()>=N && y.size()>=N;
     if(!on){
         if(r.mean5)r.mean5->setVisible(false);
@@ -1036,6 +1063,7 @@ void MainWindow::check_config_files()
         {"signals.txt",             "信号リスト(既定の8信号を使用)"},
         {"signals_denominator.txt", "分母の信号リスト(既定の2信号を使用)"},
         {"mean_label_signals.txt",  "平均値の数値を出す信号(すべての信号に出す)"},
+        {"settings.ini",            "最新ショットの平均に使うショット数など(5ショットを使用)"},
     };
     QStringList missing;
     for(const Item &it : items){

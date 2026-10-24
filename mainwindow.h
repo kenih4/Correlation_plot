@@ -66,6 +66,10 @@ private:
     bool highlight_initialized = false;
     void update_mean_lines(QCustomPlot *plot);
     bool mean_label_enabled(const QString &signal);
+    int latest_mean_shots();                    // 十字印の平均に使う最新のショット数(settings.ini)
+    bool settings_loaded = false;
+    QDateTime settings_mtime;
+    int mean_shots = 5;
     bool mean_label_loaded = false;
     QDateTime mean_label_mtime;
     QVector<QRegularExpression> mean_label_regex;   // mean_label_signals.txt の各行(ワイルドカード)
