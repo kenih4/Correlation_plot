@@ -3,6 +3,8 @@
 
 #include <QMainWindow>
 #include <QTreeWidget>
+#include <QRegularExpression>
+#include <QDateTime>
 #include <QActionGroup>
 #include "corr_data.h"
 #include "qcustomplot.h"
@@ -61,6 +63,11 @@ private:
     void init_highlight_threshold();
     bool highlight_initialized = false;
     void update_mean_lines(QCustomPlot *plot);
+    bool mean_label_enabled(const QString &signal);
+    bool mean_label_loaded = false;
+    QDateTime mean_label_mtime;
+    QVector<QRegularExpression> mean_label_regex;   // mean_label_signals.txt の各行(ワイルドカード)
+    QMap<QCustomPlot*,QString> plot_signal;         // 散布図ごとの横軸の信号名
     struct MeanLines{
         QCPItemStraightLine *hi = nullptr;  // 閾値以上の点の x の平均(赤)
         QCPItemStraightLine *lo = nullptr;  // 閾値未満の点の x の平均(灰色)

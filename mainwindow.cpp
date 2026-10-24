@@ -704,6 +704,38 @@ void MainWindow::update_highlight_mask(QCustomPlot *plot)
     }
 }
 
+// 平均値の数値(左下)を出す信号かどうか。
+// 設定ファイル ~/.config/Correlation_plot/mean_label_signals.txt に、1行1つ信号名を書く
+// ('*' '?' のワイルドカード可。空行と '#' で始まる行は無視)。
+// ファイルが無い、または有効な行が1つもないときは、すべての信号で出す。
+// 更新日時が変わったら読み直す(アプリを再起動しなくてよい)。
+bool MainWindow::mean_label_enabled(const QString &signal)
+{
+    QFileInfo fi(signal_list_file("mean_label_signals.txt"));
+    QDateTime mt = fi.exists() ? fi.lastModified() : QDateTime();
+    if(!mean_label_loaded || mt!=mean_label_mtime){
+        mean_label_loaded = true;
+        mean_label_mtime = mt;
+        mean_label_regex.clear();
+        QFile fp(fi.absoluteFilePath());
+        if(fi.exists() && fp.open(QIODevice::ReadOnly | QIODevice::Text)){
+            QTextStream in(&fp);
+            while(!in.atEnd()){
+                QString line = in.readLine().trimmed();
+                if(line.isEmpty() || line.startsWith('#'))continue;
+                mean_label_regex.append(QRegularExpression(QRegularExpression::wildcardToRegularExpression(line)));
+            }
+            DLOG << "Load mean label signals : " << fi.absoluteFilePath().toStdString()
+                 << "  (" << mean_label_regex.size() << " patterns)" << endl;
+        }
+    }
+    if(mean_label_regex.isEmpty())return true;
+    for(const QRegularExpression &re : mean_label_regex){
+        if(re.match(signal).hasMatch())return true;
+    }
+    return false;
+}
+
 // Highlight 中は、散布図に縦線を引く。
 //   赤   : 閾値以上の点の x (横軸の信号) の平均
 //   灰色 : 閾値未満の点の x の平均
@@ -751,8 +783,9 @@ void MainWindow::update_mean_lines(QCustomPlot *plot)
         f.setPointSize(9);
         m.hi_text->setFont(f);
     }
-    if(n_hi>0)m.hi_text->setText(QString("mean(>=) : %1").arg(sum_hi/n_hi,0,'g',5));
-    m.hi_text->setVisible(n_hi>0);
+    bool show_label = n_hi>0 && mean_label_enabled(plot_signal.value(plot));
+    if(show_label)m.hi_text->setText(QString("mean(>=) : %1").arg(sum_hi/n_hi,0,'g',5));
+    m.hi_text->setVisible(show_label);
 }
 
 // 点の色を決めて表示する。
@@ -1165,6 +1198,7 @@ void MainWindow::plot_data(QCustomPlot *plot,int n)
     bool dt = detrend_act->isChecked();
     plot_shape[plot] = (name_x.find("/phase")!=string::npos)
             ? QCPScatterStyle::ssDiamond : QCPScatterStyle::ssCircle;
+    plot_signal[plot] = QString::fromStdString(name_x);
     QVector<double> yraw = y;
     QVector<int> shot(x.size());
     for(int i=0;i<shot.size();i++)shot[i] = i;
@@ -1534,6 +1568,7 @@ void MainWindow::plot_data(QCustomPlot *plot,int n,int beg,int end)
     bool dt = detrend_act->isChecked();
     plot_shape[plot] = (name_x.find("/phase")!=string::npos)
             ? QCPScatterStyle::ssDiamond : QCPScatterStyle::ssCircle;
+    plot_signal[plot] = QString::fromStdString(name_x);
     QVector<double> yraw = y;
     if(dt)detrend_xy(x,y,yraw,shot);
     set_scatter_data(plot,x,y,yraw,shot);
