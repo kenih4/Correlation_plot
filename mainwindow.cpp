@@ -1017,7 +1017,17 @@ void MainWindow::check_config_files()
     statusBar()->showMessage(tr("Config file(s) not found: using defaults"));
     QMessageBox *box = new QMessageBox(QMessageBox::Warning,"Correlation Plot",text,QMessageBox::Ok,this);
     box->setAttribute(Qt::WA_DeleteOnClose);
+    // メインウィンドウの真ん中に重ねて出す(ウィンドウマネージャ任せだと離れた所に出て気づきにくい)
+    auto center = [this,box](){
+        QPoint c = mapToGlobal(rect().center());
+        box->move(c.x()-box->frameGeometry().width()/2,c.y()-box->frameGeometry().height()/2);
+    };
+    box->adjustSize();
+    center();
     box->open();        // 閉じるまでこのウィンドウは操作できないが、処理(Getなど)は止めない
+    box->raise();
+    box->activateWindow();
+    QTimer::singleShot(0,box,center);       // 表示後に枠を含めた大きさで置き直す
 }
 
 // 全信号を同時に使ったランダムフォレストの重要度を表にして出す。
