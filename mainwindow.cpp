@@ -734,13 +734,13 @@ void MainWindow::hide_recent_points(QCustomPlot *plot)
     if(recent[plot].mean5)recent[plot].mean5->setVisible(false);
 }
 
-// 散布図を6つ追加した領域(初期は非表示)を作る。File メニューの More Scatter Plots で開閉する
+// 散布図を9つ(3段×3列)追加した領域(初期は非表示)を作る。File メニューの More Scatter Plots で開閉する
 void MainWindow::create_extra_plots()
 {
     extra_container = new QWidget(ui->centralwidget);
     QGridLayout *grid = new QGridLayout(extra_container);
     grid->setContentsMargins(0,0,0,0);
-    for(int k=0;k<6;k++){
+    for(int k=0;k<9;k++){
         QCustomPlot *p = new QCustomPlot(extra_container);
         p->setMinimumSize(248,230);
         plot_init(p);
@@ -748,11 +748,11 @@ void MainWindow::create_extra_plots()
         extra_plots.append(p);
     }
     extra_container->hide();
-    ui->verticalLayout_5->addWidget(extra_container,2);   // 既存の2段(各1)に対して2段分
+    ui->verticalLayout_5->addWidget(extra_container,3);   // 既存の2段(各1)に対して3段分
 
 }
 
-// File メニュー: ウィンドウを下に広げて散布図を6つ追加(合計12個)/元に戻す
+// File メニュー: ウィンドウを下に広げて散布図を9つ追加(合計15個)/元に戻す
 void MainWindow::set_extra_plots(bool show)
 {
     if(show==extra_visible)return;
@@ -766,7 +766,7 @@ void MainWindow::set_extra_plots(bool show)
             if(screen())h = qMin(h,screen()->availableGeometry().height());
             resize(width(),h);
         }
-        plot_extra(true);       // 今ある計算結果で7〜12位を描く
+        plot_extra(true);       // 今ある計算結果で7〜15位を描く
     }else{
         extra_container->hide();
         extra_visible = false;
@@ -797,7 +797,7 @@ void MainWindow::clear_plot(QCustomPlot *plot)
     plot->replot(QCustomPlot::rpQueuedReplot);
 }
 
-// 7〜12位の散布図(下矢印ボタンで開いているときだけ)
+// 7〜15位の散布図(File メニューの More Scatter Plots で開いているときだけ)
 void MainWindow::plot_extra(bool b)
 {
     if(!extra_visible || corrdata->sig_size()<2 || corrdata->data_size()<2)return;
@@ -1726,9 +1726,9 @@ void MainWindow::createActions()
     fileMenu->addAction(mean5_act);
     connect(mean5_act, &QAction::toggled, this, &MainWindow::mean5_toggled);
 
-    QAction *extraAct = new QAction(tr("&More Scatter Plots (12)"), this);
+    QAction *extraAct = new QAction(tr("&More Scatter Plots (15)"), this);
     extraAct->setCheckable(true);
-    extraAct->setStatusTip(tr("Show 6 more scatter plots below (12 in total)"));
+    extraAct->setStatusTip(tr("Show 9 more scatter plots below (15 in total)"));
     connect(extraAct, &QAction::toggled, this, &MainWindow::set_extra_plots);
     fileMenu->addAction(extraAct);
 
