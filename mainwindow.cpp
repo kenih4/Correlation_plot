@@ -386,7 +386,7 @@ void MainWindow::plot_init(QCustomPlot *plot)
     plot->addGraph();
     plot->graph(1)->setPen(QPen(QColor("#8000ff")));
     plot->graph(1)->setLineStyle(QCPGraph::lsNone);
-    plot->graph(1)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,"#8000ff", "#8f8000ff", 8));
+    plot->graph(1)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,"#8000ff", "#8000ff", 8));
     plot->addGraph();
     plot->graph(2)->setPen(QPen(Qt::blue));
     plot->graph(2)->setLineStyle(QCPGraph::lsNone);
@@ -556,11 +556,17 @@ void MainWindow::set_recent_points(QCustomPlot *plot,const QVector<double> &x,co
         r.g3 = plot->addGraph();
         r.g3->setPen(QPen(QColor("#ff00ff")));
         r.g3->setLineStyle(QCPGraph::lsNone);
-        r.g3->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,"#ff00ff","#8fff00ff",6));
+        r.g3->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,"#ff00ff","#ff00ff",6));
         r.g4 = plot->addGraph();
         r.g4->setPen(QPen(QColor("#ff8000")));
         r.g4->setLineStyle(QCPGraph::lsNone);
-        r.g4->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,"#ff8000","#8fff8000",5));
+        r.g4->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,"#ff8000","#ff8000",5));
+        // 最新4点は、後から作られる赤い点(Highlight)やグラデーションの点に隠れて白抜きに見えないよう、
+        // 常に手前(overlay レイヤー)に描く。後から移したものほど手前なので、最新の点が一番上になる
+        r.g4->setLayer("overlay");
+        r.g3->setLayer("overlay");
+        plot->graph(1)->setLayer("overlay");
+        plot->graph(2)->setLayer("overlay");
     }
     auto pick = [&x,&y](QCPGraph *g,int back){
         QVector<double> xs,ys;
