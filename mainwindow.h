@@ -70,6 +70,9 @@ private:
     bool settings_loaded = false;
     QDateTime settings_mtime;
     int mean_shots = 5;
+    double cross_sigma = 1.0;                   // 十字印を赤にする距離(σ_hi の何倍以内か)。settings.ini [CrossColor] sigma
+    bool cross_require_closer = true;           // かつ、閾値未満の平均より閾値以上の平均に近いこと。require_closer_than_low
+    bool near_good_mean(const QVector<double> &x,const QVector<char> &hi,double xbar);
     bool mean_label_loaded = false;
     QDateTime mean_label_mtime;
     QVector<QRegularExpression> mean_label_regex;   // mean_label_signals.txt の各行(ワイルドカード)

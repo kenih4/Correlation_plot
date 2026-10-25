@@ -607,17 +607,56 @@ int MainWindow::latest_mean_shots()
         settings_loaded = true;
         settings_mtime = mt;
         mean_shots = 5;
+        cross_sigma = 1.0;
+        cross_require_closer = true;
         if(fi.exists()){
             QSettings st(fi.absoluteFilePath(),QSettings::IniFormat);
             bool ok = false;
             int n = ini_string(st,"LatestMean/shots","5").toInt(&ok);
             if(ok && n>=1 && n<=1000)mean_shots = n;
             else DLOG << "settings.ini: invalid LatestMean/shots, using 5" << endl;
+            // [CrossColor] 十字印を赤くする基準
+            bool ok2 = false;
+            double k = ini_string(st,"CrossColor/sigma","1").toDouble(&ok2);
+            if(ok2 && k>0 && k<=100)cross_sigma = k;
+            else if(st.contains("CrossColor/sigma"))DLOG << "settings.ini: invalid CrossColor/sigma, using 1" << endl;
+            QString rc = ini_string(st,"CrossColor/require_closer_than_low","true").toLower();
+            if(rc=="false" || rc=="0" || rc=="no" || rc=="off")cross_require_closer = false;
             DLOG << "Load settings : " << fi.absoluteFilePath().toStdString()
                  << "  (LatestMean/shots=" << mean_shots << ")" << endl;
         }
     }
     return mean_shots;
+}
+
+// 十字印の x 座標(最新Nショットの平均 xbar)が、閾値以上のショットの x の平均に「近い」かどうか。
+//   (A) |xbar − μ_hi| ≤ k × σ_hi        σ_hi: 閾値以上のショットの x の標準偏差
+//   (B) |xbar − μ_hi| < |xbar − μ_lo|   閾値未満の平均より閾値以上の平均に近い(require_closer_than_low)
+// 閾値以上のショットが5未満、または σ_hi が 0 のときは判定しない(false)。
+bool MainWindow::near_good_mean(const QVector<double> &x,const QVector<char> &hi,double xbar)
+{
+    double sum_hi = 0,sum_lo = 0;
+    int n_hi = 0,n_lo = 0;
+    for(int i=0;i<x.size() && i<hi.size();i++){
+        if(!std::isfinite(x[i]))continue;
+        if(hi[i]){sum_hi += x[i];n_hi++;}
+        else{sum_lo += x[i];n_lo++;}
+    }
+    if(n_hi<5)return false;
+    double mu_hi = sum_hi/n_hi;
+    double var = 0;
+    for(int i=0;i<x.size() && i<hi.size();i++){
+        if(hi[i] && std::isfinite(x[i]))var += (x[i]-mu_hi)*(x[i]-mu_hi);
+    }
+    double sd = sqrt(var/n_hi);
+    if(sd<=0)return false;
+    double d_hi = fabs(xbar-mu_hi);
+    if(d_hi > cross_sigma*sd)return false;
+    if(cross_require_closer && n_lo>0){
+        double mu_lo = sum_lo/n_lo;
+        if(!(d_hi < fabs(xbar-mu_lo)))return false;
+    }
+    return true;
 }
 
 // 最新Nショット(Nは settings.ini の LatestMean/shots、既定5)の平均((横軸の平均, 縦軸の平均))を十字印(+)で示す。
@@ -645,6 +684,15 @@ void MainWindow::update_recent_mean(QCustomPlot *plot,const QVector<double> &x,c
     }
     QVector<double> mx(1,sx/N),my(1,sy/N);
     r.mean5->setData(mx,my);
+    // Highlight がオンで、横軸の平均が「優秀なショットの平均」に近ければ、赤く太くして目立たせる
+    bool near = false;
+    if(ui->checkBox_highlight->isChecked() && scatter_xy.contains(plot)){
+        const ScatterData &s = scatter_xy[plot];
+        near = near_good_mean(s.x,s.hi,sx/N);
+    }
+    r.mean5->setScatterStyle(near
+        ? QCPScatterStyle(QCPScatterStyle::ssPlus,QPen(Qt::red,3.5),QBrush(Qt::NoBrush),22)
+        : QCPScatterStyle(QCPScatterStyle::ssPlus,QPen(Qt::black,2.5),QBrush(Qt::NoBrush),18));
     r.mean5->setVisible(true);
 }
 
@@ -1343,6 +1391,7 @@ void MainWindow::on_V_highlight_editingFinished()
     for(auto it = scatter_xy.begin(); it != scatter_xy.end(); ++it){
         update_highlight_mask(it.key());
         apply_display(it.key());
+        update_recent_mean(it.key(),it.value().x,it.value().y);     // 十字印の色(近いか)も変わる
         it.key()->replot();
     }
     // 平均の差順のときは、閾値が変わると順位も変わる
