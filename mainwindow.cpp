@@ -8,6 +8,7 @@
 #include <QTextStream>
 #include <QDebug>
 #include <QSettings>
+#include <QProcess>
 #include <QGridLayout>
 #include <QScreen>
 #include <QDialog>
@@ -1177,6 +1178,26 @@ void MainWindow::check_config_files()
     QTimer::singleShot(0,box,center);       // 表示後に枠を含めた大きさで置き直す
 }
 
+// 設定ディレクトリ(~/.config/Correlation_plot)の中のテキストファイル(*.txt, *.ini)を、
+// pluma でまとめて開く(pluma が起動済みなら、タブとして追加される)。
+void MainWindow::open_config_files()
+{
+    QString dir = QFileInfo(signal_list_file("signals.txt")).absolutePath();
+    QStringList names = QDir(dir).entryList(QStringList() << "*.txt" << "*.ini",QDir::Files,QDir::Name);
+    if(names.isEmpty()){
+        QMessageBox::information(this,"Correlation Plot",
+            QString("開くテキストファイルがありません。\n\n%1").arg(dir));
+        return;
+    }
+    QStringList files;
+    for(const QString &n : names)files << QDir(dir).absoluteFilePath(n);
+    if(!QProcess::startDetached("pluma",files)){
+        QMessageBox::warning(this,"Correlation Plot",
+            QString("pluma を起動できませんでした。pluma がインストールされ、PATH にあるか確認してください。\n\n%1")
+            .arg(files.join("\n")));
+    }
+}
+
 // 全信号を同時に使ったランダムフォレストの重要度を表にして出す。
 // 1信号ずつのMIC/rhoと違い、似た信号の重複や他の信号の影響を踏まえた順位になる。
 void MainWindow::show_importance()
@@ -1682,6 +1703,11 @@ void MainWindow::createActions()
     importanceAct->setStatusTip(tr("Rank all signals at once by random forest importance (multivariate)"));
     connect(importanceAct, &QAction::triggered, this, &MainWindow::show_importance);
     fileMenu->addAction(importanceAct);
+
+    QAction *openCfgAct = new QAction(tr("Open &Config Files (pluma)"), this);
+    openCfgAct->setStatusTip(tr("Open all text files in ~/.config/Correlation_plot with pluma"));
+    connect(openCfgAct, &QAction::triggered, this, &MainWindow::open_config_files);
+    fileMenu->addAction(openCfgAct);
 
     fileMenu->addSeparator();
     fileMenu->addAction(rank_mic_act);
