@@ -1145,6 +1145,7 @@ void MainWindow::check_config_files()
         {"signals.txt",             "信号リスト(既定の8信号を使用)"},
         {"signals_denominator.txt", "分母の信号リスト(既定の2信号を使用)"},
         {"mean_label_signals.txt",  "平均値の数値を出す信号(すべての信号に出す)"},
+        {"tree_groups.txt",         "信号ツリーのグループ名(既定の14グループを使用)"},
         {"settings.ini",            "最新ショットの平均のショット数、Highlight の閾値の決め方(最新5ショット、上位25%を使用)"},
     };
     QStringList missing;
@@ -1486,12 +1487,36 @@ void MainWindow::on_treeWidget_itemDoubleClicked(QTreeWidgetItem *item, int colu
     }
     corrdata->rank_init();
 }
+// 信号ツリーのグループ名。
+// 設定ファイル ~/.config/Correlation_plot/tree_groups.txt に、1行1グループ名で書く
+// (空行と '#' で始まる行は無視。重複は最初の1つだけ使う)。
+// ファイルが無い、または有効な行が1つもないときは、下の既定のグループを使う。起動時に1回だけ読む。
+QStringList MainWindow::load_group_list()
+{
+    QStringList list;
+    QFile fp(signal_list_file("tree_groups.txt"));
+    if(fp.open(QIODevice::ReadOnly | QIODevice::Text)){
+        QTextStream in(&fp);
+        while(!in.atEnd()){
+            QString line = in.readLine().trimmed();
+            if(line.isEmpty() || line.startsWith('#') || list.contains(line))continue;
+            list << line;
+        }
+    }
+    if(!list.isEmpty()){
+        cerr << "Load tree groups : " << fp.fileName().toStdString()
+             << "  (" << list.size() << " groups)" << endl;
+        return list;
+    }
+    return QStringList{"sr_safety_topup","sr_mon_xsbt","sr_mon_img","xfel_mon_bpm","xfel_mon_xsbt","xfel_mon_msbpm","xfel_mon_csr","xfel_mon_blm","xfel_mon_ct","xfel_mon_timing","xfel_llrf_238","xfel_llrf_476","xfel_llrf_lb","xfel_llrf_sb_1"};
+}
+
 void MainWindow::create_tree()
 {
     ui->treeWidget->setColumnCount(1);
     ui->treeWidget->setHeaderLabel(tr("Signal"));
     QList<QTreeWidgetItem*> items;
-    QStringList list = {"sr_safety_topup","sr_mon_xsbt","sr_mon_img","xfel_mon_bpm","xfel_mon_xsbt","xfel_mon_msbpm","xfel_mon_csr","xfel_mon_blm","xfel_mon_ct","xfel_mon_timing","xfel_llrf_238","xfel_llrf_476","xfel_llrf_lb","xfel_llrf_sb_1"};
+    QStringList list = load_group_list();
     Db_sig_inf *get_inf;
     int get_inf_cnt;
 

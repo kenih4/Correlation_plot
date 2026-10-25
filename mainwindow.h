@@ -22,6 +22,7 @@ public:
     ~MainWindow();
     bool eventFilter(QObject *obj, QEvent *event) override;
     void create_tree();
+    QStringList load_group_list();      // 信号ツリーのグループ名(tree_groups.txt、無ければ既定)
 private slots:
     void on_pushButton_clicked();
     void on_treeWidget_itemDoubleClicked(QTreeWidgetItem *item, int column);
