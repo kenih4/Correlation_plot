@@ -281,6 +281,9 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event)
     if(obj==ui->widget && event->type()==QEvent::Leave){
         highlight_shot(-1);
     }
+    if(extra_scroll && obj==extra_scroll->viewport() && event->type()==QEvent::Resize){
+        fit_extra_row_height();
+    }
     // 追加の散布図の上のホイールは、グラフの拡大縮小ではなく領域のスクロールにする(Ctrl+ホイールで拡大縮小)
     if(event->type()==QEvent::Wheel && extra_scroll){
         QCustomPlot *plot = qobject_cast<QCustomPlot*>(obj);
@@ -753,7 +756,7 @@ void MainWindow::hide_recent_points(QCustomPlot *plot)
 // 追加の散布図を入れるスクロール領域(初期は非表示)を作る。File メニューの More Scatter Plots で開閉する。
 // 散布図は、必要な数(7位以降の信号の数)だけ、plot_extra() が増やす。
 // 領域の高さは3段分で、それを超える分は縦にスクロールして見る。
-// 散布図の高さは、広げた時点の上段の散布図の高さに合わせる(set_extra_plots)。
+// 散布図の高さは、この領域の見える高さの 1/3(fit_extra_row_height)。上段の散布図とそろう。
 void MainWindow::create_extra_plots()
 {
     extra_scroll = new QScrollArea(ui->centralwidget);
@@ -765,8 +768,23 @@ void MainWindow::create_extra_plots()
     extra_grid = new QGridLayout(extra_container);
     extra_grid->setContentsMargins(0,0,0,0);
     extra_scroll->setWidget(extra_container);
+    // 最小でも散布図3段分。レイアウトの比率(上段の各段:この領域 = 1:3)で、見える高さは上段3段分と同じになる
+    extra_scroll->setMinimumHeight(3*230+2*extra_grid->spacing()+2);
+    extra_scroll->viewport()->installEventFilter(this);     // 大きさが変わったら散布図の高さを合わせ直す
     extra_scroll->hide();
     ui->verticalLayout_5->addWidget(extra_scroll,3);   // 既存の2段(各1)に対して3段分
+}
+
+// スクロール領域の見える高さの 1/3 を、追加の散布図1段分の高さにする。
+// 領域の高さはレイアウトの比率で上段3段分と同じになるので、追加の散布図も上段と同じ高さになる。
+void MainWindow::fit_extra_row_height()
+{
+    if(!extra_scroll)return;
+    int vh = extra_scroll->viewport()->height();
+    int h = (vh - 2*extra_grid->spacing())/3;
+    if(h<100 || h==extra_row_h)return;      // まだ大きさが決まっていない / 変化なし
+    extra_row_h = h;
+    for(QCustomPlot *p : extra_plots)p->setFixedHeight(extra_row_h);
 }
 
 // 追加の散布図を n 個以上にする(足りない分だけ作る。減らしはしない)
@@ -791,12 +809,7 @@ void MainWindow::set_extra_plots(bool show)
     if(show==extra_visible)return;
     bool resizable = !isMaximized() && !isFullScreen();
     if(show){
-        // 上段の散布図と同じ高さにそろえる。領域は、その3段分(+隙間)の高さ
-        extra_row_h = qMax(230,ui->widget_1->height());
-        int vh = 3*extra_row_h + 2*extra_grid->spacing() + 2;
-        extra_scroll->setFixedHeight(vh);
-        for(QCustomPlot *p : extra_plots)p->setFixedHeight(extra_row_h);
-        extra_dh = vh + ui->verticalLayout_5->spacing();
+        extra_dh = extra_scroll->minimumHeight() + ui->verticalLayout_5->spacing();
         extra_scroll->show();
         extra_visible = true;
         if(resizable){
@@ -842,6 +855,7 @@ void MainWindow::plot_extra(bool b)
     if(!extra_visible || corrdata->sig_size()<2 || corrdata->data_size()<2)return;
     int need = qMax(0,corrdata->sig_size()-7);
     ensure_extra_plots(need);
+    fit_extra_row_height();
     for(int k=0;k<extra_plots.size();k++){
         if(k<need){
             extra_plots[k]->setVisible(true);
@@ -857,6 +871,7 @@ void MainWindow::plot_extra_range(int beg,int end)
     if(!extra_visible || corrdata->sig_size()<2)return;
     int need = qMax(0,corrdata->sig_size()-7);
     ensure_extra_plots(need);
+    fit_extra_row_height();
     for(int k=0;k<extra_plots.size();k++){
         if(k<need){
             extra_plots[k]->setVisible(true);
