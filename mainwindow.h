@@ -99,6 +99,7 @@ private:
     QAction *rank_mic_act = nullptr;
     QAction *rank_imp_act = nullptr;
     QAction *rank_gap_act = nullptr;
+    QAction *rank_list_act = nullptr;
     QActionGroup *rank_group = nullptr;
     int rank_mode() const;
     void update_rank_scores(int beg=-1,int end=-1);

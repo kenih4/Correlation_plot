@@ -59,12 +59,14 @@ MainWindow::MainWindow(QWidget *parent)
     rank_mic_act = new QAction(tr("Rank by &MIC"), this);
     rank_imp_act = new QAction(tr("Rank by &Importance"), this);
     rank_gap_act = new QAction(tr("Rank by &Gap of Means"), this);
+    rank_list_act = new QAction(tr("Rank by &List Order"), this);
     rank_mic_act->setStatusTip(tr("Order the scatter plots by MIC"));
     rank_imp_act->setStatusTip(tr("Order the scatter plots by random forest importance"));
     rank_gap_act->setStatusTip(tr("Order the scatter plots by the gap between the two Highlight means (divided by the standard deviation)"));
     rank_group = new QActionGroup(this);
     rank_group->setExclusive(true);
-    for(QAction *a : {rank_mic_act,rank_imp_act,rank_gap_act}){
+    rank_list_act->setStatusTip(tr("Order the scatter plots in the order of the Plot Signal list (top to bottom, after the first item)"));
+    for(QAction *a : {rank_mic_act,rank_imp_act,rank_gap_act,rank_list_act}){
         a->setCheckable(true);
         rank_group->addAction(a);
     }
@@ -1103,6 +1105,7 @@ void MainWindow::stats_toggled(bool checked)
 
 int MainWindow::rank_mode() const
 {
+    if(rank_list_act->isChecked())return Corr_data::RANK_LIST;
     if(rank_gap_act->isChecked())return Corr_data::RANK_GAP;
     if(rank_imp_act->isChecked())return Corr_data::RANK_IMPORTANCE;
     return Corr_data::RANK_MIC;
@@ -1112,6 +1115,12 @@ int MainWindow::rank_mode() const
 // beg<end なら時間範囲の表示用(Threshold は使わない)。
 void MainWindow::update_rank_scores(int beg,int end)
 {
+    if(rank_mode()==Corr_data::RANK_LIST){
+        // Plot Signal リストの上から順(最初の項目は基準信号)
+        vector<string> names;
+        for(int i=0;i<ui->listWidget->count();i++)names.push_back(ui->listWidget->item(i)->text().toStdString());
+        corrdata->update_list_order(names);
+    }
     double hl = ui->V_highlight->text().toDouble();
     if(beg<end){
         corrdata->update_importance(false,0,beg,end);
@@ -1713,6 +1722,7 @@ void MainWindow::createActions()
     fileMenu->addAction(rank_mic_act);
     fileMenu->addAction(rank_imp_act);
     fileMenu->addAction(rank_gap_act);
+    fileMenu->addAction(rank_list_act);
     connect(rank_group, &QActionGroup::triggered, this, &MainWindow::rank_mode_changed);
     fileMenu->addSeparator();
     fileMenu->addAction(detrend_act);

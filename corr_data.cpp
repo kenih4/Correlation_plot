@@ -377,6 +377,19 @@ bool Corr_data::calc_importance(bool use_th,double th,vector<Importance> &out,do
     return true;
 }
 
+void Corr_data::update_list_order(const vector<string> &names)
+{
+    if(rank_mode!=RANK_LIST || sig.empty())return;
+    for(size_t i=1;i<sig.size();i++){
+        double score = -1e6 - (double)i;        // リストに無い信号は最後(元の並び順)
+        for(size_t k=0;k<names.size();k++){
+            if(names[k]==sig[i].name){score = -(double)k;break;}
+        }
+        sig[i].list_score = score;
+    }
+    sig[0].list_score = 1e30;       // 基準信号が常に先頭(0位)になるようにする
+}
+
 void Corr_data::update_gap(bool use_th,double th,double hl_th,int beg,int end)
 {
     gap_valid = false;
