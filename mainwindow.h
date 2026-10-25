@@ -111,6 +111,7 @@ private:
     QScrollArea *extra_scroll = nullptr;   // 追加の散布図を入れるスクロール領域
     QWidget *extra_container = nullptr;    // その中身(散布図を3列で並べる)
     QGridLayout *extra_grid = nullptr;
+    int extra_row_h = 230;                 // 追加の散布図の高さ(広げた時点の上段の散布図の高さに合わせる)
     void ensure_extra_plots(int n);        // 追加の散布図を n 個以上に増やす
     QVector<QCustomPlot*> extra_plots;
     bool extra_visible = false;
