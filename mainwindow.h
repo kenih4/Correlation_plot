@@ -97,7 +97,7 @@ private:
     QAction *detrend_act = nullptr;
     QAction *stats_act = nullptr;
     QAction *gradient_act = nullptr;
-    // 散布図の並び順(どれか1つ。排他選択): MIC / Importance / 2群の平均の差 / Plot Signal リストの順(初期値)
+    // 散布図の並び順(どれか1つ。排他選択): MIC(初期値) / Importance / 2群の平均の差 / Plot Signal リストの順(Highlight をオンにすると切り替わる)
     QAction *rank_mic_act = nullptr;
     QAction *rank_imp_act = nullptr;
     QAction *rank_gap_act = nullptr;

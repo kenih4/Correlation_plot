@@ -72,7 +72,7 @@ MainWindow::MainWindow(QWidget *parent)
         a->setCheckable(true);
         rank_group->addAction(a);
     }
-    rank_list_act->setChecked(true);
+    rank_mic_act->setChecked(true);
 
     int status = db_init();
     cerr << "#### DB Init : " << status << endl;
@@ -1464,8 +1464,13 @@ void MainWindow::line_toggled(bool)
 }
 
 // Highlight の切り替え/閾値の変更は、保持しているデータで表示だけ描き直す
-void MainWindow::on_checkBox_highlight_toggled(bool)
+void MainWindow::on_checkBox_highlight_toggled(bool checked)
 {
+    // Highlight をオンにしたら、並び順を「List Order」にする(オフに戻しても並び順はそのまま)
+    if(checked && !rank_list_act->isChecked()){
+        rank_list_act->setChecked(true);    // 排他グループなので他の選択は外れる
+        rank_mode_changed();                // 並び順を変えて描き直す
+    }
     on_V_highlight_editingFinished();
 }
 
