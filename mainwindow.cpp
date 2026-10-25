@@ -10,6 +10,8 @@
 #include <QSettings>
 #include <QProcess>
 #include <QGridLayout>
+#include <QScrollBar>
+#include <QWheelEvent>
 #include <QScreen>
 #include <QDialog>
 #include <QTableWidget>
@@ -278,6 +280,18 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event)
 {
     if(obj==ui->widget && event->type()==QEvent::Leave){
         highlight_shot(-1);
+    }
+    // 追加の散布図の上のホイールは、グラフの拡大縮小ではなく領域のスクロールにする(Ctrl+ホイールで拡大縮小)
+    if(event->type()==QEvent::Wheel && extra_scroll){
+        QCustomPlot *plot = qobject_cast<QCustomPlot*>(obj);
+        if(plot && extra_plots.contains(plot)){
+            QWheelEvent *we = static_cast<QWheelEvent*>(event);
+            if(!(we->modifiers() & Qt::ControlModifier)){
+                QScrollBar *bar = extra_scroll->verticalScrollBar();
+                bar->setValue(bar->value() - we->angleDelta().y()/2);
+                return true;
+            }
+        }
     }
     return QMainWindow::eventFilter(obj,event);
 }
@@ -736,41 +750,57 @@ void MainWindow::hide_recent_points(QCustomPlot *plot)
     if(recent[plot].mean5)recent[plot].mean5->setVisible(false);
 }
 
-// 散布図を9つ(3段×3列)追加した領域(初期は非表示)を作る。File メニューの More Scatter Plots で開閉する
+// 追加の散布図を入れるスクロール領域(初期は非表示)を作る。File メニューの More Scatter Plots で開閉する。
+// 散布図は、必要な数(7位以降の信号の数)だけ、plot_extra() が増やす。
+// 領域の高さは3段分で、それを超える分は縦にスクロールして見る。
 void MainWindow::create_extra_plots()
 {
-    extra_container = new QWidget(ui->centralwidget);
-    QGridLayout *grid = new QGridLayout(extra_container);
-    grid->setContentsMargins(0,0,0,0);
-    for(int k=0;k<9;k++){
+    extra_scroll = new QScrollArea(ui->centralwidget);
+    extra_scroll->setWidgetResizable(true);
+    extra_scroll->setFrameShape(QFrame::NoFrame);
+    extra_scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    extra_scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    extra_container = new QWidget;
+    extra_grid = new QGridLayout(extra_container);
+    extra_grid->setContentsMargins(0,0,0,0);
+    extra_scroll->setWidget(extra_container);
+    extra_scroll->setMinimumHeight(3*230+2*extra_grid->spacing()+2);
+    extra_scroll->hide();
+    ui->verticalLayout_5->addWidget(extra_scroll,3);   // 既存の2段(各1)に対して3段分
+}
+
+// 追加の散布図を n 個以上にする(足りない分だけ作る。減らしはしない)
+void MainWindow::ensure_extra_plots(int n)
+{
+    while(extra_plots.size()<n){
+        int k = extra_plots.size();
         QCustomPlot *p = new QCustomPlot(extra_container);
         p->setMinimumSize(248,230);
         plot_init(p);
-        grid->addWidget(p,k/3,k%3);
+        p->installEventFilter(this);        // ホイールでスクロールするため
+        extra_grid->addWidget(p,k/3,k%3);
+        p->show();
         extra_plots.append(p);
     }
-    extra_container->hide();
-    ui->verticalLayout_5->addWidget(extra_container,3);   // 既存の2段(各1)に対して3段分
-
 }
 
-// File メニュー: ウィンドウを下に広げて散布図を9つ追加(合計15個)/元に戻す
+// File メニュー: ウィンドウを下に広げて、7位以降の信号の散布図をスクロール領域に出す/元に戻す
 void MainWindow::set_extra_plots(bool show)
 {
     if(show==extra_visible)return;
     bool resizable = !isMaximized() && !isFullScreen();
     if(show){
-        extra_dh = extra_container->sizeHint().height() + ui->verticalLayout_5->spacing();
-        extra_container->show();
+        extra_dh = extra_scroll->minimumHeight() + ui->verticalLayout_5->spacing();
+        extra_scroll->show();
         extra_visible = true;
         if(resizable){
             int h = height() + extra_dh;
             if(screen())h = qMin(h,screen()->availableGeometry().height());
             resize(width(),h);
         }
-        plot_extra(true);       // 今ある計算結果で7〜15位を描く
+        plot_extra(true);       // 今ある計算結果で7位以降を描く
     }else{
-        extra_container->hide();
+        extra_scroll->hide();
         extra_visible = false;
         if(resizable){
             resize(width(),qMax(minimumSizeHint().height(),height()-extra_dh));
@@ -799,30 +829,36 @@ void MainWindow::clear_plot(QCustomPlot *plot)
     plot->replot(QCustomPlot::rpQueuedReplot);
 }
 
-// 7〜15位の散布図(File メニューの More Scatter Plots で開いているときだけ)
+// 7位以降の散布図(File メニューの More Scatter Plots で開いているときだけ)。
+// 7位以降の信号の数(信号の総数 − 7)だけ散布図を用意し、使わない分は空にして隠す。
 void MainWindow::plot_extra(bool b)
 {
     if(!extra_visible || corrdata->sig_size()<2 || corrdata->data_size()<2)return;
+    int need = qMax(0,corrdata->sig_size()-7);
+    ensure_extra_plots(need);
     for(int k=0;k<extra_plots.size();k++){
-        int rank = 7+k;
-        if(rank>=corrdata->sig_size()){
+        if(k<need){
+            extra_plots[k]->setVisible(true);
+            plot_data(extra_plots[k],corrdata->get_ranking(7+k,b));
+        }else{
             clear_plot(extra_plots[k]);
-            continue;
+            extra_plots[k]->setVisible(false);
         }
-        plot_data(extra_plots[k],corrdata->get_ranking(rank,b));
     }
 }
-
 void MainWindow::plot_extra_range(int beg,int end)
 {
     if(!extra_visible || corrdata->sig_size()<2)return;
+    int need = qMax(0,corrdata->sig_size()-7);
+    ensure_extra_plots(need);
     for(int k=0;k<extra_plots.size();k++){
-        int rank = 7+k;
-        if(rank>=corrdata->sig_size()){
+        if(k<need){
+            extra_plots[k]->setVisible(true);
+            plot_data(extra_plots[k],corrdata->get_ranking(7+k),beg,end);
+        }else{
             clear_plot(extra_plots[k]);
-            continue;
+            extra_plots[k]->setVisible(false);
         }
-        plot_data(extra_plots[k],corrdata->get_ranking(rank),beg,end);
     }
 }
 
@@ -1736,9 +1772,9 @@ void MainWindow::createActions()
     fileMenu->addAction(mean5_act);
     connect(mean5_act, &QAction::toggled, this, &MainWindow::mean5_toggled);
 
-    QAction *extraAct = new QAction(tr("&More Scatter Plots (15)"), this);
+    QAction *extraAct = new QAction(tr("&More Scatter Plots"), this);
     extraAct->setCheckable(true);
-    extraAct->setStatusTip(tr("Show 9 more scatter plots below (15 in total)"));
+    extraAct->setStatusTip(tr("Show the scatter plots of the 7th and later signals below (scroll to see all)"));
     connect(extraAct, &QAction::toggled, this, &MainWindow::set_extra_plots);
     fileMenu->addAction(extraAct);
 
