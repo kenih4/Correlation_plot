@@ -54,7 +54,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     mean5_act = new QAction(tr("Show &Mean of Latest Shots"), this);
     mean5_act->setCheckable(true);
-    mean5_act->setChecked(false);
+    mean5_act->setChecked(true);
     mean5_act->setStatusTip(tr("Mark the mean (x and y) of the latest N shots with a cross on each scatter plot (N: settings.ini LatestMean/shots, default 5)"));
 
     // 散布図の並び順。ラジオボタン相当の排他選択(QActionGroup)
@@ -72,7 +72,7 @@ MainWindow::MainWindow(QWidget *parent)
         a->setCheckable(true);
         rank_group->addAction(a);
     }
-    rank_imp_act->setChecked(true);
+    rank_list_act->setChecked(true);
 
     int status = db_init();
     cerr << "#### DB Init : " << status << endl;

@@ -97,7 +97,7 @@ private:
     QAction *detrend_act = nullptr;
     QAction *stats_act = nullptr;
     QAction *gradient_act = nullptr;
-    // 散布図の並び順(どれか1つ。排他選択): MIC / Importance(初期値) / 2群の平均の差
+    // 散布図の並び順(どれか1つ。排他選択): MIC / Importance / 2群の平均の差 / Plot Signal リストの順(初期値)
     QAction *rank_mic_act = nullptr;
     QAction *rank_imp_act = nullptr;
     QAction *rank_gap_act = nullptr;
@@ -107,7 +107,7 @@ private:
     void update_rank_scores(int beg=-1,int end=-1);
     QString last_highlight_text;
     QAction *line_act = nullptr;        // 最新3点を線でつなぐ(初期値オフ)
-    QAction *mean5_act = nullptr;       // 最新5ショットの平均を十字印で示す(初期値オフ)
+    QAction *mean5_act = nullptr;       // 最新Nショットの平均を十字印で示す(初期値オン)
     QScrollArea *extra_scroll = nullptr;   // 追加の散布図を入れるスクロール領域
     QWidget *extra_container = nullptr;    // その中身(散布図を3列で並べる)
     QGridLayout *extra_grid = nullptr;
