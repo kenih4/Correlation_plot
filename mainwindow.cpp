@@ -878,6 +878,7 @@ void MainWindow::clear_plot(QCustomPlot *plot)
         if(mean_lines[plot].hi)mean_lines[plot].hi->setVisible(false);
         if(mean_lines[plot].lo)mean_lines[plot].lo->setVisible(false);
         if(mean_lines[plot].hi_text)mean_lines[plot].hi_text->setVisible(false);
+        if(mean_lines[plot].band)mean_lines[plot].band->setVisible(false);
     }
     scatter_xy.remove(plot);
     plot->xAxis->setLabel(QString());
@@ -1009,6 +1010,7 @@ void MainWindow::update_mean_lines(QCustomPlot *plot)
         if(m.hi)m.hi->setVisible(false);
         if(m.lo)m.lo->setVisible(false);
         if(m.hi_text)m.hi_text->setVisible(false);
+        if(m.band)m.band->setVisible(false);
         return;
     }
     const ScatterData &s = scatter_xy[plot];
@@ -1030,6 +1032,25 @@ void MainWindow::update_mean_lines(QCustomPlot *plot)
     };
     place(m.hi,QColor(Qt::red),n_hi>0,n_hi>0 ? sum_hi/n_hi : 0);
     place(m.lo,QColor(150,150,150),n_lo>0,n_lo>0 ? sum_lo/n_lo : 0);
+
+    // 2本の線の内側を薄い灰色で塗る(両方の線があるときだけ)。y は軸の上端〜下端いっぱい
+    if(!m.band){
+        m.band = new QCPItemRect(plot);
+        m.band->setPen(Qt::NoPen);
+        m.band->setBrush(QBrush(QColor(190,190,190,90)));
+        m.band->setLayer("grid");           // 点(main)の下に描く
+        m.band->topLeft->setTypeX(QCPItemPosition::ptPlotCoords);
+        m.band->topLeft->setTypeY(QCPItemPosition::ptAxisRectRatio);
+        m.band->bottomRight->setTypeX(QCPItemPosition::ptPlotCoords);
+        m.band->bottomRight->setTypeY(QCPItemPosition::ptAxisRectRatio);
+    }
+    bool both = n_hi>0 && n_lo>0;
+    if(both){
+        double xa = sum_hi/n_hi,xb = sum_lo/n_lo;
+        m.band->topLeft->setCoords(std::min(xa,xb),0);
+        m.band->bottomRight->setCoords(std::max(xa,xb),1);
+    }
+    m.band->setVisible(both);
 
     // 赤い線(閾値以上の平均値)の数値を左下に表示する
     if(!m.hi_text){
