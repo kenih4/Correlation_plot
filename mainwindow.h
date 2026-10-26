@@ -56,6 +56,7 @@ private slots:
     void show_importance();     // File メニューの Importance
     void check_config_files();  // 起動時に設定ファイルの有無を確認して警告する
     void open_config_files();   // File メニュー: 設定ディレクトリのテキストファイルを pluma で全部開く
+    void list_context_menu(const QPoint &pos);   // Plot Signal リストの右クリックメニュー(Show mean label)
     void rank_mode_changed();       // File メニューの Rank by ... (MIC / Importance / Gap of Means)
 
 private:
@@ -70,6 +71,7 @@ private:
     bool highlight_initialized = false;
     void update_mean_lines(QCustomPlot *plot);
     bool mean_label_enabled(const QString &signal);
+    void refresh_mean_labels();
     int latest_mean_shots();                    // 十字印の平均に使う最新のショット数(settings.ini)
     bool settings_loaded = false;
     QDateTime settings_mtime;
@@ -77,9 +79,6 @@ private:
     double cross_sigma = 1.0;                   // 十字印を赤にする距離(σ_hi の何倍以内か)。settings.ini [CrossColor] sigma
     bool cross_require_closer = true;           // かつ、閾値未満の平均より閾値以上の平均に近いこと。require_closer_than_low
     bool near_good_mean(const QVector<double> &x,const QVector<char> &hi,double xbar);
-    bool mean_label_loaded = false;
-    QDateTime mean_label_mtime;
-    QVector<QRegularExpression> mean_label_regex;   // mean_label_signals.txt の各行(ワイルドカード)
     QMap<QCustomPlot*,QString> plot_signal;         // 散布図ごとの横軸の信号名
     struct MeanLines{
         QCPItemStraightLine *hi = nullptr;  // 閾値以上の点の x の平均(赤)

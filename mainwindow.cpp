@@ -9,6 +9,7 @@
 #include <QDebug>
 #include <QSettings>
 #include <QProcess>
+#include <QMenu>
 #include <QGridLayout>
 #include <QScrollBar>
 #include <QWheelEvent>
@@ -108,6 +109,8 @@ MainWindow::MainWindow(QWidget *parent)
     }
     // listWidget, listWidget_2 が変更されたら信号リストファイルに保存する
     connect_save_signal_list(ui->listWidget,"signals.txt");
+    ui->listWidget->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(ui->listWidget,&QListWidget::customContextMenuRequested,this,&MainWindow::list_context_menu);
     connect_save_signal_list(ui->listWidget_2,"signals_denominator.txt");
     QFont lFont = font();
     lFont.setBold(true);
@@ -169,6 +172,24 @@ QString MainWindow::signal_list_file(const QString &name)
 
 // 1行1信号のテキストファイルから list を読み込む。
 // ファイルが無い/空の場合は false を返す(呼び出し側で既定リストを使う)
+// signals.txt の1行は「信号名  フラグ ...」(空白区切り)。フラグはリストの項目に持たせ(FLAGS_ROLE)、
+// 保存するときにそのまま書き戻す。フラグ:
+//   mean_label : この信号が横軸の散布図に、閾値以上の平均値の数値(左下)を出す。
+//                1つも付いていなければ、すべての信号に出す。
+static const int FLAGS_ROLE = Qt::UserRole + 1;
+static const char *FLAG_MEAN_LABEL = "mean_label";
+
+static bool item_has_flag(const QListWidgetItem *it,const QString &flag)
+{
+    return it && it->data(FLAGS_ROLE).toStringList().contains(flag);
+}
+
+// フラグ付きの項目は、リスト上で赤い文字にして見分けられるようにする
+static void apply_item_style(QListWidgetItem *it)
+{
+    it->setForeground(item_has_flag(it,FLAG_MEAN_LABEL) ? QBrush(QColor(192,0,0)) : QBrush());
+}
+
 bool MainWindow::load_signal_list(QListWidget *list, const QString &name)
 {
     QFile fp(signal_list_file(name));
@@ -179,7 +200,14 @@ bool MainWindow::load_signal_list(QListWidget *list, const QString &name)
     while(!in.atEnd()){
         QString line = in.readLine().trimmed();
         if(line.isEmpty() || line.startsWith('#'))continue;
-        list->addItem(line);
+        QStringList tok = line.split(QRegularExpression("\\s+"),Qt::SkipEmptyParts);
+        QListWidgetItem *it = new QListWidgetItem(tok.takeFirst());
+        if(!tok.isEmpty()){
+            tok.removeDuplicates();
+            it->setData(FLAGS_ROLE,tok);
+            apply_item_style(it);
+        }
+        list->addItem(it);
     }
     cerr << "Load signal list : " << signal_list_file(name).toStdString()
          << "  (" << list->count() << " signals)" << endl;
@@ -197,7 +225,10 @@ void MainWindow::save_signal_list(QListWidget *list, const QString &name)
     }
     QTextStream out(&fp);
     for(int i=0;i<list->count();++i){
-        out << list->item(i)->text() << Qt::endl;
+        QString line = list->item(i)->text();
+        QStringList flags = list->item(i)->data(FLAGS_ROLE).toStringList();
+        if(!flags.isEmpty())line += "    " + flags.join(" ");
+        out << line << Qt::endl;
     }
 }
 
@@ -917,35 +948,53 @@ void MainWindow::update_highlight_mask(QCustomPlot *plot)
 }
 
 // 平均値の数値(左下)を出す信号かどうか。
-// 設定ファイル ~/.config/Correlation_plot/mean_label_signals.txt に、1行1つ信号名を書く
-// ('*' '?' のワイルドカード可。空行と '#' で始まる行は無視)。
-// ファイルが無い、または有効な行が1つもないときは、すべての信号で出す。
-// 更新日時が変わったら読み直す(アプリを再起動しなくてよい)。
+// Plot Signal リストの項目に mean_label フラグ(signals.txt、右クリックの Show mean label)が付いた信号だけに出す。
+// 基準信号(リストの先頭)は散布図の横軸にならないので数えない。
+// フラグの付いた信号が1つもなければ、すべての信号に出す。
 bool MainWindow::mean_label_enabled(const QString &signal)
 {
-    QFileInfo fi(signal_list_file("mean_label_signals.txt"));
-    QDateTime mt = fi.exists() ? fi.lastModified() : QDateTime();
-    if(!mean_label_loaded || mt!=mean_label_mtime){
-        mean_label_loaded = true;
-        mean_label_mtime = mt;
-        mean_label_regex.clear();
-        QFile fp(fi.absoluteFilePath());
-        if(fi.exists() && fp.open(QIODevice::ReadOnly | QIODevice::Text)){
-            QTextStream in(&fp);
-            while(!in.atEnd()){
-                QString line = in.readLine().trimmed();
-                if(line.isEmpty() || line.startsWith('#'))continue;
-                mean_label_regex.append(QRegularExpression(QRegularExpression::wildcardToRegularExpression(line)));
-            }
-            DLOG << "Load mean label signals : " << fi.absoluteFilePath().toStdString()
-                 << "  (" << mean_label_regex.size() << " patterns)" << endl;
-        }
+    bool any = false,hit = false;
+    for(int i=1;i<ui->listWidget->count();i++){
+        QListWidgetItem *it = ui->listWidget->item(i);
+        if(!item_has_flag(it,FLAG_MEAN_LABEL))continue;
+        any = true;
+        if(it->text()==signal)hit = true;
     }
-    if(mean_label_regex.isEmpty())return true;
-    for(const QRegularExpression &re : mean_label_regex){
-        if(re.match(signal).hasMatch())return true;
+    return !any || hit;
+}
+
+// 平均値の数値の出し方が変わったとき、全散布図の表示を更新する
+void MainWindow::refresh_mean_labels()
+{
+    for(auto it = scatter_xy.begin(); it != scatter_xy.end(); ++it){
+        update_mean_lines(it.key());
+        it.key()->replot();
     }
-    return false;
+}
+
+// Plot Signal リストの右クリックメニュー: その信号の平均値の数値(mean_label フラグ)の付け外し
+void MainWindow::list_context_menu(const QPoint &pos)
+{
+    QListWidgetItem *it = ui->listWidget->itemAt(pos);
+    if(!it)return;
+    QMenu menu(this);
+    QAction *act = menu.addAction(tr("Show mean label"));
+    act->setCheckable(true);
+    act->setChecked(item_has_flag(it,FLAG_MEAN_LABEL));
+    if(ui->listWidget->row(it)==0){
+        act->setEnabled(false);     // 基準信号(先頭)は散布図の横軸にならない
+        act->setText(tr("Show mean label (not for the base signal)"));
+    }
+    if(menu.exec(ui->listWidget->viewport()->mapToGlobal(pos))!=act)return;
+
+    QStringList flags = it->data(FLAGS_ROLE).toStringList();
+    if(act->isChecked())flags.append(FLAG_MEAN_LABEL);
+    else flags.removeAll(FLAG_MEAN_LABEL);
+    flags.removeDuplicates();
+    it->setData(FLAGS_ROLE,flags);
+    apply_item_style(it);
+    save_signal_list(ui->listWidget,"signals.txt");
+    refresh_mean_labels();
 }
 
 // Highlight 中は、散布図に縦線を引く。
@@ -1217,7 +1266,6 @@ void MainWindow::check_config_files()
     const Item items[] = {
         {"signals.txt",             "信号リスト(既定の8信号を使用)"},
         {"signals_denominator.txt", "分母の信号リスト(既定の2信号を使用)"},
-        {"mean_label_signals.txt",  "平均値の数値を出す信号(すべての信号に出す)"},
         {"tree_groups.txt",         "信号ツリーのグループ名(既定の14グループを使用)"},
         {"settings.ini",            "最新ショットの平均のショット数、Highlight の閾値の決め方(最新5ショット、上位25%を使用)"},
     };
