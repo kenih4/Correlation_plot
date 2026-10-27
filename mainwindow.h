@@ -129,7 +129,6 @@ private:
     void hide_recent_points(QCustomPlot *plot);
     struct RecentGraphs{
         QCPGraph *g3 = nullptr;
-        QCPGraph *g4 = nullptr;
         QCPCurve *line = nullptr;   // 最新3点をつなぐ線(点の順序を保つため QCPCurve)
         QCPGraph *mean5 = nullptr;  // 最新5ショットの(横軸の平均, 縦軸の平均)の十字印
         bool range_mode = false;    // 時間範囲指定の表示中は「最新」がないので線も出さない

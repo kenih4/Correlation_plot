@@ -33,11 +33,10 @@ static const char *CSV_FILE = "/home_2023/xfel/xfelopr/users/kenichi/dvlp/corr_d
 // 散布図・トレンドグラフで「強調する点・線・文字」に使う色(既定は暗い青緑。白い背景でのコントラスト比 6.5)。
 // settings.ini の [Colors] で変えられる(load_colors。再起動で反映)
 static QColor MAIN_COLOR(0,105,107);
-// 最新の点の色。LATEST1=最新(サイズ12)、LATEST2=2番目(9)、LATEST3=3番目(6)、LATEST4=4番目(5)
+// 最新の点の色。LATEST1=最新(サイズ12)、LATEST2=2番目(9)、LATEST3=3番目(6)。4番目以降は通常の点と同じ
 static QColor LATEST1_COLOR("#8000ff");     // 紫
 static QColor LATEST2_COLOR("#0000ff");     // 青
 static QColor LATEST3_COLOR("#50c878");     // エメラルドグリーン
-static QColor LATEST4_COLOR("#ff8000");     // オレンジ
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -598,8 +597,9 @@ void MainWindow::set_info_text(QCustomPlot *plot,int n,const QString &best,const
     b.text->setColor(significant ? MAIN_COLOR : QColor(60,60,60));
 }
 
-// 最新の4点を色分けして重ねる: 最新=青(サイズ10, graph(2))、2番目=紫(8, graph(1))、
-// 3番目=マゼンタ(6)、4番目=オレンジ(5)。それより古い点は通常の青緑(またはグラデーション)
+// 最新の3点を色分けして重ねる(色は settings.ini の [Colors] latest1〜latest3):
+// 最新=紫(サイズ12, graph(2))、2番目=青(9, graph(1))、3番目=エメラルドグリーン(6)。
+// 4番目以降は通常の点と同じ(青緑の輪、Highlight なら塗りつぶし/灰色の輪、Gradient ならその色)
 void MainWindow::set_recent_points(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y)
 {
     RecentGraphs &r = recent[plot];
@@ -608,13 +608,8 @@ void MainWindow::set_recent_points(QCustomPlot *plot,const QVector<double> &x,co
         r.g3->setPen(QPen(LATEST3_COLOR));
         r.g3->setLineStyle(QCPGraph::lsNone);
         r.g3->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,LATEST3_COLOR,LATEST3_COLOR,6));
-        r.g4 = plot->addGraph();
-        r.g4->setPen(QPen(LATEST4_COLOR));
-        r.g4->setLineStyle(QCPGraph::lsNone);
-        r.g4->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,LATEST4_COLOR,LATEST4_COLOR,5));
-        // 最新4点は、後から作られる青緑の点(Highlight)やグラデーションの点に隠れて白抜きに見えないよう、
+        // 最新3点は、後から作られる青緑の点(Highlight)やグラデーションの点に隠れて白抜きに見えないよう、
         // 常に手前(overlay レイヤー)に描く。後から移したものほど手前なので、最新の点が一番上になる
-        r.g4->setLayer("overlay");
         r.g3->setLayer("overlay");
         plot->graph(1)->setLayer("overlay");
         plot->graph(2)->setLayer("overlay");
@@ -631,7 +626,6 @@ void MainWindow::set_recent_points(QCustomPlot *plot,const QVector<double> &x,co
     pick(plot->graph(2),1);
     pick(plot->graph(1),2);
     pick(r.g3,3);
-    pick(r.g4,4);
     r.range_mode = false;
     update_recent_line(plot,x,y);
     update_recent_mean(plot,x,y);
@@ -655,7 +649,6 @@ static QString ini_string(QSettings &st,const QString &key,const QString &def)
 //   latest1=#8000ff       ; 最新の点(サイズ12)
 //   latest2=#0000ff       ; 2番目の点(サイズ9)
 //   latest3=#50c878       ; 3番目の点(サイズ6)
-//   latest4=#ff8000       ; 4番目の点(サイズ5)
 // 色は「#RRGGBB」または色名(teal, red など)。無い/不正なキーは既定の色のまま。
 void MainWindow::load_colors()
 {
@@ -673,7 +666,6 @@ void MainWindow::load_colors()
     get("Colors/latest1",LATEST1_COLOR);
     get("Colors/latest2",LATEST2_COLOR);
     get("Colors/latest3",LATEST3_COLOR);
-    get("Colors/latest4",LATEST4_COLOR);
 }
 
 // Highlight の閾値を、基準信号の値 v から決める。
@@ -830,7 +822,6 @@ void MainWindow::hide_recent_points(QCustomPlot *plot)
 {
     if(recent.contains(plot) && recent[plot].g3){
         recent[plot].g3->setVisible(false);
-        recent[plot].g4->setVisible(false);
     }
     recent[plot].range_mode = true;
     if(recent[plot].line)recent[plot].line->setVisible(false);
@@ -1120,7 +1111,7 @@ void MainWindow::update_mean_lines(QCustomPlot *plot)
 //   Gradient  : 最古=青緑 → 最新=青 のグラデーション。1点ごとの色指定はできないので、
 //               色ごとのグラフ(GRADIENT_BINS個)に点を振り分ける
 //   Highlight : 閾値以上の点だけ色を付け(青緑、またはGradient)、それ以外は灰色(graph(0))にする
-// 最新4点の色(青/紫/マゼンタ/オレンジ)は別のグラフで重ねているので、どの設定でも変わらない。
+// 最新3点の色(紫/青/エメラルドグリーン)は別のグラフで重ねているので、どの設定でも変わらない。
 void MainWindow::apply_display(QCustomPlot *plot)
 {
     apply_display_impl(plot);
@@ -1142,7 +1133,6 @@ void MainWindow::apply_shape(QCustomPlot *plot)
     for(int i=0;i<3 && i<plot->graphCount();i++)set(plot->graph(i));
     if(recent.contains(plot)){
         set(recent[plot].g3);
-        set(recent[plot].g4);
     }
     if(highlight_graph.contains(plot))set(highlight_graph[plot]);
     if(gradient_first.contains(plot)){
