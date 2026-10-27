@@ -37,6 +37,10 @@ static QColor MAIN_COLOR(0,105,107);
 static QColor LATEST1_COLOR("#8000ff");     // 紫
 static QColor LATEST2_COLOR("#0000ff");     // 青
 static QColor LATEST3_COLOR("#50c878");     // エメラルドグリーン
+// 十字印が「優秀なショットの平均に近い」(閾値以上の)ときの色。settings.ini の cross_near で指定。
+// 指定が無ければ、強調の色(MAIN_COLOR)と同じ
+static QColor CROSS_NEAR_COLOR;
+static QColor cross_near_color(){return CROSS_NEAR_COLOR.isValid() ? CROSS_NEAR_COLOR : MAIN_COLOR;}
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -649,6 +653,7 @@ static QString ini_string(QSettings &st,const QString &key,const QString &def)
 //   latest1=#8000ff       ; 最新の点(サイズ12)
 //   latest2=#0000ff       ; 2番目の点(サイズ9)
 //   latest3=#50c878       ; 3番目の点(サイズ6)
+//   cross_near=#00696B    ; 十字印が優秀なショットの平均に近いとき(閾値以上のとき)の色。無ければ highlight と同じ
 // 色は「#RRGGBB」または色名(teal, red など)。無い/不正なキーは既定の色のまま。
 void MainWindow::load_colors()
 {
@@ -666,6 +671,7 @@ void MainWindow::load_colors()
     get("Colors/latest1",LATEST1_COLOR);
     get("Colors/latest2",LATEST2_COLOR);
     get("Colors/latest3",LATEST3_COLOR);
+    get("Colors/cross_near",CROSS_NEAR_COLOR);
 }
 
 // Highlight の閾値を、基準信号の値 v から決める。
@@ -787,7 +793,7 @@ void MainWindow::update_recent_mean(QCustomPlot *plot,const QVector<double> &x,c
         near = near_good_mean(s.x,s.hi,sx/N);
     }
     r.mean5->setScatterStyle(near
-        ? QCPScatterStyle(QCPScatterStyle::ssPlus,QPen(MAIN_COLOR,3.5),QBrush(Qt::NoBrush),22)
+        ? QCPScatterStyle(QCPScatterStyle::ssPlus,QPen(cross_near_color(),3.5),QBrush(Qt::NoBrush),22)
         : QCPScatterStyle(QCPScatterStyle::ssPlus,QPen(Qt::black,2.5),QBrush(Qt::NoBrush),18));
     r.mean5->setVisible(true);
 }
