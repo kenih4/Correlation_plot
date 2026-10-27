@@ -30,6 +30,9 @@ static const char *CSV_FILE = "/home_2023/xfel/xfelopr/users/kenichi/dvlp/corr_d
 #include <cmath>
 #include <algorithm>
 
+// 散布図・トレンドグラフで「強調する点・線・文字」に使う色(暗い青緑。白い背景でのコントラスト比 6.5)
+static const QColor MAIN_COLOR(0,105,107);
+
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
@@ -50,7 +53,7 @@ MainWindow::MainWindow(QWidget *parent)
     gradient_act = new QAction(tr("&Gradient"), this);
     gradient_act->setCheckable(true);
     gradient_act->setChecked(false);
-    gradient_act->setStatusTip(tr("Color points from red (oldest) to blue (newest)"));
+    gradient_act->setStatusTip(tr("Color points from teal (oldest) to blue (newest)"));
 
     line_act = new QAction(tr("&Connect Latest 3 Points"), this);
     line_act->setCheckable(true);
@@ -151,8 +154,8 @@ MainWindow::MainWindow(QWidget *parent)
     tracer->setGraph(ui->widget->graph(0));
     tracer->setGraphKey(0.0);
     tracer->setStyle(QCPItemTracer::tsCircle);
-    tracer->setPen(QPen(Qt::red));
-    tracer->setBrush(Qt::red);
+    tracer->setPen(QPen(MAIN_COLOR));
+    tracer->setBrush(MAIN_COLOR);
     tracer->setSize(7);
     connect(ui->widget,SIGNAL(mouseMove(QMouseEvent*)),this,SLOT(trendMouseMoved(QMouseEvent*)));
     ui->widget->installEventFilter(this);
@@ -189,10 +192,10 @@ static bool item_has_flag(const QListWidgetItem *it,const QString &flag)
     return it && it->data(FLAGS_ROLE).toStringList().contains(flag);
 }
 
-// フラグ付きの項目は、リスト上で赤い文字にして見分けられるようにする
+// フラグ付きの項目は、リスト上で青緑の文字にして見分けられるようにする
 static void apply_item_style(QListWidgetItem *it)
 {
-    it->setForeground(item_has_flag(it,FLAG_MEAN_LABEL) ? QBrush(QColor(192,0,0)) : QBrush());
+    it->setForeground(item_has_flag(it,FLAG_MEAN_LABEL) ? QBrush(MAIN_COLOR) : QBrush());
 }
 
 bool MainWindow::load_signal_list(QListWidget *list, const QString &name)
@@ -302,7 +305,7 @@ void MainWindow::highlight_shot(int shot)
         if(!hg){
             hg = plot->addGraph();
             hg->setLineStyle(QCPGraph::lsNone);
-            hg->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,QPen(Qt::red,2.5),QBrush(Qt::NoBrush),18));
+            hg->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,QPen(MAIN_COLOR,2.5),QBrush(Qt::NoBrush),18));
         }
         QVector<double> hx(1,s.x[k]),hy(1,s.y[k]);
         hg->setData(hx,hy);
@@ -421,9 +424,9 @@ void MainWindow::on_pushButton_clicked()
 void MainWindow::plot_init(QCustomPlot *plot)
 {
     plot->addGraph();
-    plot->graph(0)->setPen(QPen(Qt::red));
+    plot->graph(0)->setPen(QPen(MAIN_COLOR));
     plot->graph(0)->setLineStyle(QCPGraph::lsNone);
-    plot->graph(0)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle, Qt::red, Qt::white, 5));
+    plot->graph(0)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle, MAIN_COLOR, Qt::white, 5));
     plot->addGraph();
     plot->graph(1)->setPen(QPen(QColor("#8000ff")));
     plot->graph(1)->setLineStyle(QCPGraph::lsNone);
@@ -583,13 +586,13 @@ void MainWindow::set_info_text(QCustomPlot *plot,int n,const QString &best,const
     s += impLine;
     if(!best.isEmpty())s += "\n" + best;
     b.text->setText(s);
-    // 偶然の範囲を超えていれば赤字
+    // 偶然の範囲を超えていれば青緑字
     bool significant = mic>nul && corrdata->pval(n)<0.05;
-    b.text->setColor(significant ? QColor(200,0,0) : QColor(60,60,60));
+    b.text->setColor(significant ? MAIN_COLOR : QColor(60,60,60));
 }
 
 // 最新の4点を色分けして重ねる: 最新=青(サイズ10, graph(2))、2番目=紫(8, graph(1))、
-// 3番目=マゼンタ(6)、4番目=オレンジ(5)。それより古い点は通常の赤(またはグラデーション)
+// 3番目=マゼンタ(6)、4番目=オレンジ(5)。それより古い点は通常の青緑(またはグラデーション)
 void MainWindow::set_recent_points(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y)
 {
     RecentGraphs &r = recent[plot];
@@ -602,7 +605,7 @@ void MainWindow::set_recent_points(QCustomPlot *plot,const QVector<double> &x,co
         r.g4->setPen(QPen(QColor("#ff8000")));
         r.g4->setLineStyle(QCPGraph::lsNone);
         r.g4->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,"#ff8000","#ff8000",5));
-        // 最新4点は、後から作られる赤い点(Highlight)やグラデーションの点に隠れて白抜きに見えないよう、
+        // 最新4点は、後から作られる青緑の点(Highlight)やグラデーションの点に隠れて白抜きに見えないよう、
         // 常に手前(overlay レイヤー)に描く。後から移したものほど手前なので、最新の点が一番上になる
         r.g4->setLayer("overlay");
         r.g3->setLayer("overlay");
@@ -682,7 +685,7 @@ int MainWindow::latest_mean_shots()
             int n = ini_string(st,"LatestMean/shots","5").toInt(&ok);
             if(ok && n>=1 && n<=1000)mean_shots = n;
             else DLOG << "settings.ini: invalid LatestMean/shots, using 5" << endl;
-            // [CrossColor] 十字印を赤くする基準
+            // [CrossColor] 十字印を青緑にする基準
             bool ok2 = false;
             double k = ini_string(st,"CrossColor/sigma","1").toDouble(&ok2);
             if(ok2 && k>0 && k<=100)cross_sigma = k;
@@ -751,14 +754,14 @@ void MainWindow::update_recent_mean(QCustomPlot *plot,const QVector<double> &x,c
     }
     QVector<double> mx(1,sx/N),my(1,sy/N);
     r.mean5->setData(mx,my);
-    // Highlight がオンで、横軸の平均が「優秀なショットの平均」に近ければ、赤く太くして目立たせる
+    // Highlight がオンで、横軸の平均が「優秀なショットの平均」に近ければ、青緑に太くして目立たせる
     bool near = false;
     if(ui->checkBox_highlight->isChecked() && scatter_xy.contains(plot)){
         const ScatterData &s = scatter_xy[plot];
         near = near_good_mean(s.x,s.hi,sx/N);
     }
     r.mean5->setScatterStyle(near
-        ? QCPScatterStyle(QCPScatterStyle::ssPlus,QPen(Qt::red,3.5),QBrush(Qt::NoBrush),22)
+        ? QCPScatterStyle(QCPScatterStyle::ssPlus,QPen(MAIN_COLOR,3.5),QBrush(Qt::NoBrush),22)
         : QCPScatterStyle(QCPScatterStyle::ssPlus,QPen(Qt::black,2.5),QBrush(Qt::NoBrush),18));
     r.mean5->setVisible(true);
 }
@@ -1008,7 +1011,7 @@ void MainWindow::list_context_menu(const QPoint &pos)
 }
 
 // Highlight 中は、散布図に縦線を引く。
-//   赤 : 閾値以上の点の x (横軸の信号) の平均
+//   青緑 : 閾値以上の点の x (横軸の信号) の平均
 //   (閾値未満の点の x の平均は、線は引かず、薄い灰色の帯の片端としてだけ使う)
 // トレンドグラフは対象外(横軸が時刻のため)。該当する点がなければその線は出さない。
 void MainWindow::update_mean_lines(QCustomPlot *plot)
@@ -1038,9 +1041,9 @@ void MainWindow::update_mean_lines(QCustomPlot *plot)
         line->point2->setCoords(xv,1);
         line->setVisible(show);
     };
-    place(m.hi,QColor(Qt::red),n_hi>0,n_hi>0 ? sum_hi/n_hi : 0);
+    place(m.hi,MAIN_COLOR,n_hi>0,n_hi>0 ? sum_hi/n_hi : 0);
 
-    // 赤い線(閾値以上の平均)と、閾値未満の平均の位置の間を薄い灰色で塗る(両方の平均があるときだけ)。
+    // 青緑の線(閾値以上の平均)と、閾値未満の平均の位置の間を薄い灰色で塗る(両方の平均があるときだけ)。
     // 閾値未満の平均の線は引かない。y は軸の上端〜下端いっぱい
     if(!m.band){
         m.band = new QCPItemRect(plot);
@@ -1060,13 +1063,13 @@ void MainWindow::update_mean_lines(QCustomPlot *plot)
     }
     m.band->setVisible(both);
 
-    // 赤い線(閾値以上の平均値)の数値を左下に表示する
+    // 青緑の線(閾値以上の平均値)の数値を左下に表示する
     if(!m.hi_text){
         m.hi_text = new QCPItemText(plot);
         m.hi_text->setPositionAlignment(Qt::AlignBottom|Qt::AlignLeft);
         m.hi_text->position->setType(QCPItemPosition::ptAxisRectRatio);
         m.hi_text->position->setCoords(0.02,0.98);
-        m.hi_text->setColor(QColor(Qt::red));
+        m.hi_text->setColor(MAIN_COLOR);
         m.hi_text->setPen(Qt::NoPen);
         m.hi_text->setBrush(QBrush(QColor(255,255,255,200)));
         QFont f = font();
@@ -1079,10 +1082,10 @@ void MainWindow::update_mean_lines(QCustomPlot *plot)
 }
 
 // 点の色を決めて表示する。
-//   通常      : 全点を赤(graph(0))
-//   Gradient  : 最古=赤 → 最新=青 のグラデーション。1点ごとの色指定はできないので、
+//   通常      : 全点を青緑(graph(0))
+//   Gradient  : 最古=青緑 → 最新=青 のグラデーション。1点ごとの色指定はできないので、
 //               色ごとのグラフ(GRADIENT_BINS個)に点を振り分ける
-//   Highlight : 閾値以上の点だけ色を付け(赤、またはGradient)、それ以外は灰色(graph(0))にする
+//   Highlight : 閾値以上の点だけ色を付け(青緑、またはGradient)、それ以外は灰色(graph(0))にする
 // 最新4点の色(青/紫/マゼンタ/オレンジ)は別のグラフで重ねているので、どの設定でも変わらない。
 void MainWindow::apply_display(QCustomPlot *plot)
 {
@@ -1122,24 +1125,24 @@ void MainWindow::apply_display_impl(QCustomPlot *plot)
     bool grad = gradient_act->isChecked();
     bool hl = ui->checkBox_highlight->isChecked();
 
-    // graph(0): 全点。Highlight 中は灰色、それ以外は赤。
+    // graph(0): 全点。Highlight 中は灰色、それ以外は青緑。
     // Gradient だけで非表示になる graph(0) には、データを入れない(setData は x での並べ替えが走る)。
     // トレンド(ui->widget)は tracer が graph(0) のデータを使うので常に入れる。
     QCPGraph *g0 = plot->graph(0);
     if(!grad || hl || plot==ui->widget)g0->setData(s.x,s.y);
     g0->setVisible(!grad || hl);
-    QColor c0 = hl ? QColor(170,170,170) : QColor(Qt::red);
+    QColor c0 = hl ? QColor(170,170,170) : MAIN_COLOR;
     g0->setPen(QPen(c0));
     g0->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,c0,Qt::white,5));
 
-    // 強調する点だけの赤いグラフ(Highlight かつ Gradient でないとき)
+    // 強調する点だけの青緑のグラフ(Highlight かつ Gradient でないとき)
     if(hl && !grad){
         QCPGraph *&hg = highlight_graph[plot];
         if(!hg){
             hg = plot->addGraph();
-            hg->setPen(QPen(Qt::red));
+            hg->setPen(QPen(MAIN_COLOR));
             hg->setLineStyle(QCPGraph::lsNone);
-            hg->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,Qt::red,Qt::white,5));
+            hg->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,MAIN_COLOR,Qt::white,5));
         }
         QVector<double> hx,hy;
         for(int i=0;i<s.x.size();i++){
@@ -1162,7 +1165,7 @@ void MainWindow::apply_display_impl(QCustomPlot *plot)
     if(grad){
         while(plot->graphCount() < FIRST + GRADIENT_BINS){
             double t = (plot->graphCount() - FIRST) / (double)(GRADIENT_BINS - 1);
-            QColor col(qRound(255 * (1 - t)), 0, qRound(255 * t));
+            QColor col(0, qRound(MAIN_COLOR.green() * (1 - t)), qRound(MAIN_COLOR.blue() * (1 - t) + 255 * t));
             QCPGraph *g = plot->addGraph();
             g->setPen(QPen(col));
             g->setLineStyle(QCPGraph::lsNone);
