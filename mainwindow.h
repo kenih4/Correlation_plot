@@ -77,14 +77,14 @@ private:
     bool settings_loaded = false;
     QDateTime settings_mtime;
     int mean_shots = 5;
-    double cross_sigma = 1.0;                   // 十字印を緑にする距離(σ_hi の何倍以内か)。settings.ini [CrossColor] sigma
+    double cross_sigma = 1.0;                   // 十字印を赤にする距離(σ_hi の何倍以内か)。settings.ini [CrossColor] sigma
     bool cross_require_closer = true;           // かつ、閾値未満の平均より閾値以上の平均に近いこと。require_closer_than_low
     bool near_good_mean(const QVector<double> &x,const QVector<char> &hi,double xbar);
     QMap<QCustomPlot*,QString> plot_signal;         // 散布図ごとの横軸の信号名
     struct MeanLines{
-        QCPItemStraightLine *hi = nullptr;  // 閾値以上の点の x の平均(緑)
+        QCPItemStraightLine *hi = nullptr;  // 閾値以上の点の x の平均(赤)
         QCPItemRect *band = nullptr;        // 2本の線の間を薄い灰色で塗る(乖離を見やすくする)
-        QCPItemText *hi_text = nullptr;     // 緑い線の位置(閾値以上の平均値)の数値。左下に表示
+        QCPItemText *hi_text = nullptr;     // 赤い線の位置(閾値以上の平均値)の数値。左下に表示
     };
     QMap<QCustomPlot*,MeanLines> mean_lines;
     void refresh_plots();
@@ -155,7 +155,7 @@ private:
     };
     QMap<QCustomPlot*,ScatterData> scatter_xy;
     QMap<QCustomPlot*,QCPGraph*> highlight_graph;
-    QMap<QCustomPlot*,QCPGraph*> hover_graph;   // トレンドグラフで指した点に対応する散布図の点を囲む輪(緑)
+    QMap<QCustomPlot*,QCPGraph*> hover_graph;   // トレンドグラフで指した点に対応する散布図の点を囲む輪(赤)
     int hover_shot = -1;
     QString signal_list_file(const QString &name);
     bool load_signal_list(QListWidget *list, const QString &name);
