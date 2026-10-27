@@ -1,5 +1,19 @@
 #include "corr_data.h"
 
+// データ取得時にタグを決めたショットの情報を、ターミナル(標準エラー)に1行で出す。
+//   evno : 基準にした sr_mon_screen_sep5u_otr/intensity のイベント番号
+//   window: ショットの検索時間窓 beg_time ~ end_time
+//   sacla_tag, sr_tag : 決まったタグ(0 は見つからなかったことを示す)
+static void log_tag(long long evno,const Data &d,const char *note)
+{
+    cerr << "[tag] evno=" << evno
+         << "  window=" << (d.beg_time.empty() ? "-" : d.beg_time) << " ~ " << (d.end_time.empty() ? "-" : d.end_time)
+         << "  sacla_tag=" << d.sacla_tag
+         << "  sr_tag=" << d.sr_tag;
+    if(note && note[0])cerr << "  " << note;
+    cerr << endl;
+}
+
 Corr_data::Corr_data(int data_num,int f)
 {
     size = data_num;
@@ -53,6 +67,8 @@ void Corr_data::get_tag(string endtime)
                 }
                 free(get_inf_route);
             }
+            log_tag((get_inf_sep5u+i)->evno,data[i],
+                    data[i].sacla_tag==0 ? "(route 769 not found)" : (data[i].sr_tag==0 ? "(sr_tag not found)" : ""));
         }
         free(get_inf_sep5u);
     }
@@ -102,6 +118,8 @@ void Corr_data::get_tag(string begtime,string endtime)
                 }
                 free(get_inf_route);
             }
+            log_tag((get_inf_sep5u+i)->evno,data[i],
+                    data[i].sacla_tag==0 ? "(route 769 not found)" : (data[i].sr_tag==0 ? "(sr_tag not found)" : ""));
         }
         free(get_inf_sep5u);
     }
@@ -820,10 +838,8 @@ int Corr_data::add_tag(string strtime)
                         break;
                     }
                 }
-                DLOG<<"beg = "<<d.beg_time<<
-                      "  end = "<<d.end_time<<
-                      "  sacla = "<<d.sacla_tag<<
-                      "  sr = "<<d.sr_tag<<endl;
+                log_tag((get_inf_sep5u+i)->evno,d,
+                        d.sr_tag==0 ? "(sr_tag not found: dropped, retried next time)" : "");
                 if(d.sr_tag==0){
                     data.pop_back();
                     size-=1;
@@ -831,6 +847,8 @@ int Corr_data::add_tag(string strtime)
                     added++;
                 }
                 free(get_inf_route);
+            }else{
+                cerr << "[tag] evno=" << (get_inf_sep5u+i)->evno << "  route data not found (skipped, retried next time)" << endl;
             }
         }
         free(get_inf_sep5u);
