@@ -10,6 +10,10 @@
 #include <QSettings>
 #include <QProcess>
 #include <QMenu>
+#include <QSpinBox>
+#include <QFormLayout>
+#include <QDialogButtonBox>
+#include <QPushButton>
 #include <QGridLayout>
 #include <QScrollBar>
 #include <QWheelEvent>
@@ -127,6 +131,7 @@ MainWindow::MainWindow(QWidget *parent)
     timer->start();
     corrdata = new Corr_data(ui->spinBox->value(),ui->checkBox_calc->checkState());
     corrdata->set_stats(stats_act->isChecked());
+    corrdata->set_tag_offset(tag_off_sacla,tag_off_sr);
     corrdata->set_detrend(detrend_act->isChecked());
     corrdata->set_rank_mode(rank_mode());
     createActions();
@@ -358,6 +363,11 @@ void MainWindow::on_pushButton_clicked()
     delete corrdata;
     corrdata = new Corr_data(ui->spinBox->value(),ui->checkBox_calc->checkState());
     corrdata->set_stats(stats_act->isChecked());
+    corrdata->set_tag_offset(tag_off_sacla,tag_off_sr);
+    if(tag_off_sacla!=0 || tag_off_sr!=0){
+        cerr << "[tag] NOTE: tag offset is specified (sacla_tag" << showpos << tag_off_sacla
+             << ", sr_tag" << tag_off_sr << noshowpos << "). Values are matched with tag+offset." << endl;
+    }
     corrdata->set_detrend(detrend_act->isChecked());
     corrdata->set_rank_mode(rank_mode());
 
@@ -1337,6 +1347,54 @@ void MainWindow::open_config_files()
     }
 }
 
+// File メニュー: sacla_tag と sr_tag のオフセットを指定する子パネル(既定は両方0)。
+// 各信号のデータ点を選ぶとき、タグにオフセットを足したイベント番号と照合する(タグの決定自体は変わらない)。
+// Apply で設定して、全ショットのデータを取り直す(Get と同じ)。
+void MainWindow::show_tag_offset()
+{
+    QDialog *dlg = new QDialog(this);
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+    dlg->setWindowTitle("Tag Offset");
+    QFormLayout *form = new QFormLayout;
+    QSpinBox *sacla = new QSpinBox(dlg);
+    QSpinBox *sr = new QSpinBox(dlg);
+    for(QSpinBox *s : {sacla,sr}){
+        s->setRange(-1000000,1000000);
+        s->setPrefix(" ");
+    }
+    sacla->setValue((int)tag_off_sacla);
+    sr->setValue((int)tag_off_sr);
+    form->addRow("sacla_tag offset", sacla);
+    form->addRow("sr_tag offset", sr);
+
+    QLabel *note = new QLabel("信号のデータ点を、タグ + オフセット のイベント番号と照合して選びます。\n"
+                              "Apply で設定して、全ショットのデータを取り直します(Get と同じ)。\n"
+                              "0 のままなら、これまでと同じです。ターミナルのタグの表示に、\n"
+                              "オフセットを指定していることが明示されます。",dlg);
+    note->setWordWrap(true);
+
+    QDialogButtonBox *buttons = new QDialogButtonBox(dlg);
+    QPushButton *apply = buttons->addButton("Apply",QDialogButtonBox::ApplyRole);
+    QPushButton *reset = buttons->addButton("Reset to 0",QDialogButtonBox::ResetRole);
+    buttons->addButton(QDialogButtonBox::Close);
+
+    QVBoxLayout *lay = new QVBoxLayout(dlg);
+    lay->addLayout(form);
+    lay->addWidget(note);
+    lay->addWidget(buttons);
+
+    connect(reset,&QPushButton::clicked,dlg,[sacla,sr](){sacla->setValue(0);sr->setValue(0);});
+    connect(buttons,&QDialogButtonBox::rejected,dlg,&QDialog::close);
+    connect(apply,&QPushButton::clicked,this,[this,sacla,sr](){
+        tag_off_sacla = sacla->value();
+        tag_off_sr = sr->value();
+        cerr << "[tag] tag offset set: sacla_tag" << showpos << tag_off_sacla << ", sr_tag" << tag_off_sr << noshowpos
+             << (tag_off_sacla==0 && tag_off_sr==0 ? "  (no offset)" : "  (OFFSET SPECIFIED)") << endl;
+        ui->pushButton->click();        // 新しいオフセットで全ショットのデータを取り直す
+    });
+    dlg->show();
+}
+
 // 全信号を同時に使ったランダムフォレストの重要度を表にして出す。
 // 1信号ずつのMIC/rhoと違い、似た信号の重複や他の信号の影響を踏まえた順位になる。
 void MainWindow::show_importance()
@@ -1842,6 +1900,11 @@ void MainWindow::createActions()
     importanceAct->setStatusTip(tr("Rank all signals at once by random forest importance (multivariate)"));
     connect(importanceAct, &QAction::triggered, this, &MainWindow::show_importance);
     fileMenu->addAction(importanceAct);
+
+    QAction *tagOffsetAct = new QAction(tr("Tag &Offset..."), this);
+    tagOffsetAct->setStatusTip(tr("Specify offsets added to sacla_tag and sr_tag when matching signal data (default 0)"));
+    connect(tagOffsetAct, &QAction::triggered, this, &MainWindow::show_tag_offset);
+    fileMenu->addAction(tagOffsetAct);
 
     QAction *openCfgAct = new QAction(tr("Open &Config Files (pluma)"), this);
     openCfgAct->setStatusTip(tr("Open all text files in ~/.config/Correlation_plot with pluma"));

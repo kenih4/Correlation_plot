@@ -4,12 +4,22 @@
 //   evno : 基準にした sr_mon_screen_sep5u_otr/intensity のイベント番号
 //   window: ショットの検索時間窓 beg_time ~ end_time
 //   sacla_tag, sr_tag : 決まったタグ(0 は見つからなかったことを示す)
-static void log_tag(long long evno,const Data &d,const char *note)
+// タグのオフセットを指定しているときは、その旨と、実際に照合に使うタグを明示する。
+static void log_tag(long long evno,const Data &d,const char *note,long long off_sacla,long long off_sr)
 {
     cerr << "[tag] evno=" << evno
          << "  window=" << (d.beg_time.empty() ? "-" : d.beg_time) << " ~ " << (d.end_time.empty() ? "-" : d.end_time)
          << "  sacla_tag=" << d.sacla_tag
          << "  sr_tag=" << d.sr_tag;
+    if(off_sacla!=0 || off_sr!=0){
+        cerr << "  [OFFSET SPECIFIED: sacla_tag" << showpos << off_sacla << noshowpos;
+        if(d.sacla_tag!=0)cerr << " -> " << d.sacla_tag+off_sacla;
+        else cerr << " (not applied: tag not found)";
+        cerr << ", sr_tag" << showpos << off_sr << noshowpos;
+        if(d.sr_tag!=0)cerr << " -> " << d.sr_tag+off_sr;
+        else cerr << " (not applied: tag not found)";
+        cerr << "]";
+    }
     if(note && note[0])cerr << "  " << note;
     cerr << endl;
 }
@@ -68,7 +78,8 @@ void Corr_data::get_tag(string endtime)
                 free(get_inf_route);
             }
             log_tag((get_inf_sep5u+i)->evno,data[i],
-                    data[i].sacla_tag==0 ? "(route 769 not found)" : (data[i].sr_tag==0 ? "(sr_tag not found)" : ""));
+                    data[i].sacla_tag==0 ? "(route 769 not found)" : (data[i].sr_tag==0 ? "(sr_tag not found)" : ""),
+                    off_sacla,off_sr);
         }
         free(get_inf_sep5u);
     }
@@ -119,7 +130,8 @@ void Corr_data::get_tag(string begtime,string endtime)
                 free(get_inf_route);
             }
             log_tag((get_inf_sep5u+i)->evno,data[i],
-                    data[i].sacla_tag==0 ? "(route 769 not found)" : (data[i].sr_tag==0 ? "(sr_tag not found)" : ""));
+                    data[i].sacla_tag==0 ? "(route 769 not found)" : (data[i].sr_tag==0 ? "(sr_tag not found)" : ""),
+                    off_sacla,off_sr);
         }
         free(get_inf_sep5u);
     }
@@ -154,8 +166,8 @@ void Corr_data::db_get_sync_data()
                         tData = &siglist.signal_list[j];
                         fdata = (Db_f_data*)tData->data;
                         for(int m=0;m<tData->num_data;m++){
-                            if(fdata[m].evno == data[n].sacla_tag||
-                                    fdata[m].evno == data[n].sr_tag){
+                            if(fdata[m].evno == eff_sacla(n)||
+                                    fdata[m].evno == eff_sr(n)){
                                         if((fdata[m].fdata>1e8||sig[i].name.find("sr_safety")!=std::string::npos)&&sig[i].name.find("efficiency")==std::string::npos){
 
                                     data[n].value[sig[i].name] = fdata[m].fdata*1.60219e-10;
@@ -193,8 +205,8 @@ void Corr_data::db_get_sync_data()
                         tData = &siglist.signal_list[j];
                         fdata = (Db_f_data*)tData->data;
                         for(int m=0;m<tData->num_data;m++){
-                            if(fdata[m].evno == data[n].sacla_tag||
-                                    fdata[m].evno == data[n].sr_tag){
+                            if(fdata[m].evno == eff_sacla(n)||
+                                    fdata[m].evno == eff_sr(n)){
                                     if((fdata[m].fdata>1e8||sig_d[i].name.find("sr_safety")!=std::string::npos)&&sig_d[i].name.find("efficiency")==std::string::npos){
 
                                     data[n].denominator[sig_d[i].name] = fdata[m].fdata*1.60219e-10;
@@ -839,7 +851,8 @@ int Corr_data::add_tag(string strtime)
                     }
                 }
                 log_tag((get_inf_sep5u+i)->evno,d,
-                        d.sr_tag==0 ? "(sr_tag not found: dropped, retried next time)" : "");
+                        d.sr_tag==0 ? "(sr_tag not found: dropped, retried next time)" : "",
+                        off_sacla,off_sr);
                 if(d.sr_tag==0){
                     data.pop_back();
                     size-=1;
@@ -915,8 +928,8 @@ void Corr_data::add_db_get_sync_data()
                             tData = &siglist.signal_list[j];
                             fdata = (Db_f_data*)tData->data;
                             for(int m=0;m<tData->num_data;m++){
-                                if(fdata[m].evno == data[n].sacla_tag||
-                                        fdata[m].evno == data[n].sr_tag){
+                                if(fdata[m].evno == eff_sacla(n)||
+                                        fdata[m].evno == eff_sr(n)){
                                         if((fdata[m].fdata>1e8||sig[i].name.find("sr_safety")!=std::string::npos)&&sig[i].name.find("efficiency")==std::string::npos){
 
                                         data[n].value[sig[i].name] = fdata[m].fdata*1.60219e-10;
@@ -958,8 +971,8 @@ void Corr_data::add_db_get_sync_data()
                             tData = &siglist.signal_list[j];
                             fdata = (Db_f_data*)tData->data;
                             for(int m=0;m<tData->num_data;m++){
-                                if(fdata[m].evno == data[n].sacla_tag||
-                                        fdata[m].evno == data[n].sr_tag){
+                                if(fdata[m].evno == eff_sacla(n)||
+                                        fdata[m].evno == eff_sr(n)){
                                     if((fdata[m].fdata>1e8||sig_d[i].name.find("sr_safety")!=std::string::npos)&&sig_d[i].name.find("efficiency")==std::string::npos){
                                         data[n].denominator[sig_d[i].name] = fdata[m].fdata*1.60219e-10;
                                     }else{

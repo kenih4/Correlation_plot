@@ -54,6 +54,7 @@ private slots:
     void on_V_highlight_editingFinished();
     void detrend_toggled(bool checked);   // File メニューの Detrend
     void show_importance();     // File メニューの Importance
+    void show_tag_offset();     // File メニューの Tag Offset...(sacla_tag, sr_tag のオフセット)
     void check_config_files();  // 起動時に設定ファイルの有無を確認して警告する
     void open_config_files();   // File メニュー: 設定ディレクトリのテキストファイルを pluma で全部開く
     void list_context_menu(const QPoint &pos);   // Plot Signal リストの右クリックメニュー(Show mean label)
@@ -93,6 +94,8 @@ private:
     void plot_extra(bool b);
     void plot_extra_range(int beg,int end);
     // File メニューのチェック式の項目(初期値: Detrend=オフ、Stats=オフ、Gradient=オフ)
+    long long tag_off_sacla = 0;        // sacla_tag のオフセット(既定0)
+    long long tag_off_sr = 0;           // sr_tag のオフセット(既定0)
     QAction *detrend_act = nullptr;
     QAction *stats_act = nullptr;
     QAction *gradient_act = nullptr;

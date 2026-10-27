@@ -114,6 +114,11 @@ public:
     int add_tag(string strtime);
     void add_db_get_sync_data();
     void rank_init(){rank.resize(0);};
+    // タグのオフセット: 各信号のデータ点を選ぶとき、タグ(sacla_tag, sr_tag)にこの値を足したイベント番号と照合する。
+    // タグが見つかっていない(0)ショットには足さない。タグ自体の決定(get_tag, add_tag)は変えない
+    void set_tag_offset(long long sacla,long long sr){off_sacla = sacla;off_sr = sr;};
+    long long tag_offset_sacla(){return off_sacla;};
+    long long tag_offset_sr(){return off_sr;};
     unsigned data_version(){return ver;};   // データが変わるたびに増える(変化の検出用)
     void set_stats(bool f){stats_flg = f;};
     void set_detrend(bool f){detrend_flg = f;};
@@ -146,6 +151,10 @@ private:
     vector<int> rank;
     int dflg;
     unsigned ver = 0;
+    long long off_sacla = 0;    // sacla_tag のオフセット
+    long long off_sr = 0;       // sr_tag のオフセット
+    long long eff_sacla(int n){return data[n].sacla_tag!=0 ? data[n].sacla_tag+off_sacla : 0;};   // オフセット込みで照合するタグ
+    long long eff_sr(int n){return data[n].sr_tag!=0 ? data[n].sr_tag+off_sr : 0;};
     void calc_mic_rows(const vector<int> &rows);
     void set_self_stats();      // 基準信号自身の指標(MIC=1など)。計算せず固定値にする
     int rank_mode = RANK_MIC;   // 順位の決め方
