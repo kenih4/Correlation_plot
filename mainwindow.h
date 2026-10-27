@@ -56,6 +56,7 @@ private slots:
     void show_importance();     // File メニューの Importance
     void show_tag_offset();     // File メニューの Tag Offset...(sacla_tag, sr_tag のオフセット)
     void check_config_files();  // 起動時に設定ファイルの有無を確認して警告する
+    void load_colors();         // 起動時に settings.ini の [Colors] から色を読む(再起動で切り替わる)
     void open_config_files();   // File メニュー: 設定ディレクトリのテキストファイルを pluma で全部開く
     void list_context_menu(const QPoint &pos);   // Plot Signal リストの右クリックメニュー(Show mean label)
     void rank_mode_changed();       // File メニューの Rank by ... (MIC / Importance / Gap of Means)

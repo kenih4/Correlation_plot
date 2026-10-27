@@ -30,14 +30,21 @@ static const char *CSV_FILE = "/home_2023/xfel/xfelopr/users/kenichi/dvlp/corr_d
 #include <cmath>
 #include <algorithm>
 
-// 散布図・トレンドグラフで「強調する点・線・文字」に使う色(暗い青緑。白い背景でのコントラスト比 6.5)
-static const QColor MAIN_COLOR(0,105,107);
+// 散布図・トレンドグラフで「強調する点・線・文字」に使う色(既定は暗い青緑。白い背景でのコントラスト比 6.5)。
+// settings.ini の [Colors] で変えられる(load_colors。再起動で反映)
+static QColor MAIN_COLOR(0,105,107);
+// 最新の点の色。LATEST1=最新(サイズ12)、LATEST2=2番目(9)、LATEST3=3番目(6)、LATEST4=4番目(5)
+static QColor LATEST1_COLOR("#8000ff");     // 紫
+static QColor LATEST2_COLOR("#0000ff");     // 青
+static QColor LATEST3_COLOR("#50c878");     // エメラルドグリーン
+static QColor LATEST4_COLOR("#ff8000");     // オレンジ
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
+    load_colors();      // plot_init などで色を使う前に、settings.ini の色を読む
 
     // File メニューの Detrend。corrdata を作る前から状態を参照するので、先に作る(初期値はオフ)
     detrend_act = new QAction(tr("&Detrend"), this);
@@ -428,13 +435,13 @@ void MainWindow::plot_init(QCustomPlot *plot)
     plot->graph(0)->setLineStyle(QCPGraph::lsNone);
     plot->graph(0)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle, MAIN_COLOR, Qt::white, 5));
     plot->addGraph();
-    plot->graph(1)->setPen(QPen(QColor("#8000ff")));
+    plot->graph(1)->setPen(QPen(LATEST2_COLOR));
     plot->graph(1)->setLineStyle(QCPGraph::lsNone);
-    plot->graph(1)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,"#8000ff", "#8000ff", 8));
+    plot->graph(1)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,LATEST2_COLOR,LATEST2_COLOR,9));
     plot->addGraph();
-    plot->graph(2)->setPen(QPen(Qt::blue));
+    plot->graph(2)->setPen(QPen(LATEST1_COLOR));
     plot->graph(2)->setLineStyle(QCPGraph::lsNone);
-    plot->graph(2)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle, "#0000ff", "#0000ff", 10));
+    plot->graph(2)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,LATEST1_COLOR,LATEST1_COLOR,12));
 
 }
 void MainWindow::plot_trend(QCustomPlot *plot)
@@ -598,13 +605,13 @@ void MainWindow::set_recent_points(QCustomPlot *plot,const QVector<double> &x,co
     RecentGraphs &r = recent[plot];
     if(!r.g3){
         r.g3 = plot->addGraph();
-        r.g3->setPen(QPen(QColor("#ff00ff")));
+        r.g3->setPen(QPen(LATEST3_COLOR));
         r.g3->setLineStyle(QCPGraph::lsNone);
-        r.g3->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,"#ff00ff","#ff00ff",6));
+        r.g3->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,LATEST3_COLOR,LATEST3_COLOR,6));
         r.g4 = plot->addGraph();
-        r.g4->setPen(QPen(QColor("#ff8000")));
+        r.g4->setPen(QPen(LATEST4_COLOR));
         r.g4->setLineStyle(QCPGraph::lsNone);
-        r.g4->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,"#ff8000","#ff8000",5));
+        r.g4->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,LATEST4_COLOR,LATEST4_COLOR,5));
         // 最新4点は、後から作られる青緑の点(Highlight)やグラデーションの点に隠れて白抜きに見えないよう、
         // 常に手前(overlay レイヤー)に描く。後から移したものほど手前なので、最新の点が一番上になる
         r.g4->setLayer("overlay");
@@ -631,15 +638,42 @@ void MainWindow::set_recent_points(QCustomPlot *plot,const QVector<double> &x,co
 }
 
 // settings.ini の値を文字列で読む。QSettings は行の途中のコメントを扱えず、カンマを含む値は
-// リストになるので、「;」「#」以降を取り除き、リストはカンマでつなぎ直して返す。
+// リストになるので、コメントを取り除き、リストはカンマでつなぎ直して返す。
 static QString ini_string(QSettings &st,const QString &key,const QString &def)
 {
     if(!st.contains(key))return def;
     QVariant var = st.value(key);
     QString s = (var.metaType().id()==QMetaType::QStringList) ? var.toStringList().join(",") : var.toString();
-    int cut = s.indexOf(QRegularExpression("[;#]"));
+    int cut = s.indexOf(QRegularExpression("(;|\\s#)"));    // 「;」、または空白の後の「#」から後ろはコメント(「#8000ff」のような色指定は残す)
     if(cut>=0)s = s.left(cut);
     return s.trimmed();
+}
+
+// 起動時に settings.ini の [Colors] から、強調の色と最新の点の色を読む(再起動で切り替わる)。
+//   [Colors]
+//   highlight=#00696B     ; 閾値以上の点・縦線・数値・十字印などの色
+//   latest1=#8000ff       ; 最新の点(サイズ12)
+//   latest2=#0000ff       ; 2番目の点(サイズ9)
+//   latest3=#50c878       ; 3番目の点(サイズ6)
+//   latest4=#ff8000       ; 4番目の点(サイズ5)
+// 色は「#RRGGBB」または色名(teal, red など)。無い/不正なキーは既定の色のまま。
+void MainWindow::load_colors()
+{
+    QFileInfo fi(signal_list_file("settings.ini"));
+    if(!fi.exists())return;
+    QSettings st(fi.absoluteFilePath(),QSettings::IniFormat);
+    auto get = [&st](const char *key,QColor &col){
+        QString s = ini_string(st,key,"");
+        if(s.isEmpty())return;
+        QColor c(s);
+        if(c.isValid())col = c;
+        else cerr << "WARNING: settings.ini " << key << "=" << s.toStdString() << " is not a valid color; using the default" << endl;
+    };
+    get("Colors/highlight",MAIN_COLOR);
+    get("Colors/latest1",LATEST1_COLOR);
+    get("Colors/latest2",LATEST2_COLOR);
+    get("Colors/latest3",LATEST3_COLOR);
+    get("Colors/latest4",LATEST4_COLOR);
 }
 
 // Highlight の閾値を、基準信号の値 v から決める。
@@ -1142,7 +1176,7 @@ void MainWindow::apply_display_impl(QCustomPlot *plot)
             hg = plot->addGraph();
             hg->setPen(QPen(MAIN_COLOR));
             hg->setLineStyle(QCPGraph::lsNone);
-            hg->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,MAIN_COLOR,Qt::white,5));
+            hg->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,MAIN_COLOR,MAIN_COLOR,5));    // 閾値以上の点は塗りつぶし
         }
         QVector<double> hx,hy;
         for(int i=0;i<s.x.size();i++){
@@ -1162,18 +1196,29 @@ void MainWindow::apply_display_impl(QCustomPlot *plot)
     if(!gradient_first.contains(plot))return;
     const int FIRST = gradient_first[plot];
 
+    // 位置 b のグラデーションの色: 暗い青緑(古い側)→ 青(新しい側)
+    auto bin_color = [GRADIENT_BINS](int b){
+        double t = b / (double)(GRADIENT_BINS - 1);
+        return QColor(0, qRound(MAIN_COLOR.green() * (1 - t)), qRound(MAIN_COLOR.blue() * (1 - t) + 255 * t));
+    };
     if(grad){
         while(plot->graphCount() < FIRST + GRADIENT_BINS){
-            double t = (plot->graphCount() - FIRST) / (double)(GRADIENT_BINS - 1);
-            QColor col(0, qRound(MAIN_COLOR.green() * (1 - t)), qRound(MAIN_COLOR.blue() * (1 - t) + 255 * t));
+            QColor col = bin_color(plot->graphCount() - FIRST);
             QCPGraph *g = plot->addGraph();
             g->setPen(QPen(col));
             g->setLineStyle(QCPGraph::lsNone);
-            g->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle, col, Qt::white, 5));
+            g->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle, col, hl ? col : QColor(Qt::white), 5));
         }
     }
     for(int b=0;b<GRADIENT_BINS && FIRST + b < plot->graphCount();b++){
         plot->graph(FIRST + b)->setVisible(grad);
+    }
+    if(grad){
+        // Highlight 中は、色が付く(閾値以上の)点だけなので塗りつぶし。そうでなければ輪
+        for(int b=0;b<GRADIENT_BINS && FIRST + b < plot->graphCount();b++){
+            QColor col = bin_color(b);
+            plot->graph(FIRST + b)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,col,hl ? col : QColor(Qt::white),5));
+        }
     }
 
     if(grad){
