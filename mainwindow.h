@@ -82,7 +82,6 @@ private:
     QMap<QCustomPlot*,QString> plot_signal;         // 散布図ごとの横軸の信号名
     struct MeanLines{
         QCPItemStraightLine *hi = nullptr;  // 閾値以上の点の x の平均(赤)
-        QCPItemStraightLine *lo = nullptr;  // 閾値未満の点の x の平均(灰色)
         QCPItemRect *band = nullptr;        // 2本の線の間を薄い灰色で塗る(乖離を見やすくする)
         QCPItemText *hi_text = nullptr;     // 赤い線の位置(閾値以上の平均値)の数値。左下に表示
     };

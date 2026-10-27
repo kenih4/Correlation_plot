@@ -876,7 +876,6 @@ void MainWindow::clear_plot(QCustomPlot *plot)
     if(recent.contains(plot) && recent[plot].mean5)recent[plot].mean5->setVisible(false);
     if(mean_lines.contains(plot)){
         if(mean_lines[plot].hi)mean_lines[plot].hi->setVisible(false);
-        if(mean_lines[plot].lo)mean_lines[plot].lo->setVisible(false);
         if(mean_lines[plot].hi_text)mean_lines[plot].hi_text->setVisible(false);
         if(mean_lines[plot].band)mean_lines[plot].band->setVisible(false);
     }
@@ -999,8 +998,8 @@ void MainWindow::list_context_menu(const QPoint &pos)
 }
 
 // Highlight 中は、散布図に縦線を引く。
-//   赤   : 閾値以上の点の x (横軸の信号) の平均
-//   灰色 : 閾値未満の点の x の平均
+//   赤 : 閾値以上の点の x (横軸の信号) の平均
+//   (閾値未満の点の x の平均は、線は引かず、薄い灰色の帯の片端としてだけ使う)
 // トレンドグラフは対象外(横軸が時刻のため)。該当する点がなければその線は出さない。
 void MainWindow::update_mean_lines(QCustomPlot *plot)
 {
@@ -1008,7 +1007,6 @@ void MainWindow::update_mean_lines(QCustomPlot *plot)
     bool hl = ui->checkBox_highlight->isChecked();
     if(plot==ui->widget || !hl || !scatter_xy.contains(plot)){
         if(m.hi)m.hi->setVisible(false);
-        if(m.lo)m.lo->setVisible(false);
         if(m.hi_text)m.hi_text->setVisible(false);
         if(m.band)m.band->setVisible(false);
         return;
@@ -1031,9 +1029,9 @@ void MainWindow::update_mean_lines(QCustomPlot *plot)
         line->setVisible(show);
     };
     place(m.hi,QColor(Qt::red),n_hi>0,n_hi>0 ? sum_hi/n_hi : 0);
-    place(m.lo,QColor(150,150,150),n_lo>0,n_lo>0 ? sum_lo/n_lo : 0);
 
-    // 2本の線の内側を薄い灰色で塗る(両方の線があるときだけ)。y は軸の上端〜下端いっぱい
+    // 赤い線(閾値以上の平均)と、閾値未満の平均の位置の間を薄い灰色で塗る(両方の平均があるときだけ)。
+    // 閾値未満の平均の線は引かない。y は軸の上端〜下端いっぱい
     if(!m.band){
         m.band = new QCPItemRect(plot);
         m.band->setPen(Qt::NoPen);
