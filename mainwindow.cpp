@@ -41,6 +41,8 @@ static QColor LATEST3_COLOR("#50c878");     // エメラルドグリーン
 // 指定が無ければ、強調の色(MAIN_COLOR)と同じ
 static QColor CROSS_NEAR_COLOR;
 static QColor cross_near_color(){return CROSS_NEAR_COLOR.isValid() ? CROSS_NEAR_COLOR : MAIN_COLOR;}
+// 十字印が「近くない」ときの色(既定は黒)。settings.ini の cross で指定
+static QColor CROSS_COLOR(Qt::black);
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -654,6 +656,7 @@ static QString ini_string(QSettings &st,const QString &key,const QString &def)
 //   latest2=#0000ff       ; 2番目の点(サイズ9)
 //   latest3=#50c878       ; 3番目の点(サイズ6)
 //   cross_near=#00696B    ; 十字印が優秀なショットの平均に近いとき(閾値以上のとき)の色。無ければ highlight と同じ
+//   cross=#000000         ; 十字印が近くないときの色(既定は黒)
 // 色は「#RRGGBB」または色名(teal, red など)。無い/不正なキーは既定の色のまま。
 void MainWindow::load_colors()
 {
@@ -672,6 +675,7 @@ void MainWindow::load_colors()
     get("Colors/latest2",LATEST2_COLOR);
     get("Colors/latest3",LATEST3_COLOR);
     get("Colors/cross_near",CROSS_NEAR_COLOR);
+    get("Colors/cross",CROSS_COLOR);
 }
 
 // Highlight の閾値を、基準信号の値 v から決める。
@@ -776,7 +780,7 @@ void MainWindow::update_recent_mean(QCustomPlot *plot,const QVector<double> &x,c
     if(!r.mean5){
         r.mean5 = plot->addGraph();
         r.mean5->setLineStyle(QCPGraph::lsNone);
-        r.mean5->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssPlus,QPen(Qt::black,2.5),QBrush(Qt::NoBrush),18));
+        r.mean5->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssPlus,QPen(CROSS_COLOR,2.5),QBrush(Qt::NoBrush),18));
         r.mean5->setLayer("overlay");       // 他の点より手前に描く
     }
     double sx = 0,sy = 0;
@@ -794,7 +798,7 @@ void MainWindow::update_recent_mean(QCustomPlot *plot,const QVector<double> &x,c
     }
     r.mean5->setScatterStyle(near
         ? QCPScatterStyle(QCPScatterStyle::ssPlus,QPen(cross_near_color(),3.5),QBrush(Qt::NoBrush),22)
-        : QCPScatterStyle(QCPScatterStyle::ssPlus,QPen(Qt::black,2.5),QBrush(Qt::NoBrush),18));
+        : QCPScatterStyle(QCPScatterStyle::ssPlus,QPen(CROSS_COLOR,2.5),QBrush(Qt::NoBrush),18));
     r.mean5->setVisible(true);
 }
 
