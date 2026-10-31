@@ -143,7 +143,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     create_tree();
     ui->V_threshold->setText(QString::number(50));
-    ui->checkBox_th->setChecked(true);
+    ui->checkBox_th->setChecked(false);
     ui->checkBox->setChecked(true);     // Auto reload
     timer = new QTimer(this);
     timer->setInterval(15000);
