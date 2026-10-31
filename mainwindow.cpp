@@ -185,8 +185,6 @@ MainWindow::MainWindow(QWidget *parent)
     tracer->setVisible(false);
     tracerText->setVisible(false);
 
-    // 起動時に Get ボタンを押す(ウィンドウ表示後にDB取得を始めるため、イベントループに載せる)
-    QTimer::singleShot(0, ui->pushButton, SLOT(click()));
     QTimer::singleShot(0, this, SLOT(check_config_files()));
 }
 
@@ -1903,6 +1901,8 @@ void MainWindow::on_pushButton_2_clicked()
 void MainWindow::update_data()
 {
     if(ui->checkBox->checkState()==0)return;
+    // 起動後、最初の Get(または Plot)でデータを取得するまでは、自動更新しない
+    if(!has_calculated)return;
 
     for(int i= 0;i<ui->listWidget->count();++i){
         corrdata->add_signal(ui->listWidget->item(i)->text().toStdString().c_str());
