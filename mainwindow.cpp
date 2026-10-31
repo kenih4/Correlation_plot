@@ -44,11 +44,16 @@ static QColor cross_near_color(){return CROSS_NEAR_COLOR.isValid() ? CROSS_NEAR_
 // 十字印が「近くない」ときの色(既定は黒)。settings.ini の cross で指定
 static QColor CROSS_COLOR(Qt::black);
 
+// 設定ファイルのディレクトリ。実行時の引数で指定されたときはそれ、なければ ~/.config/Correlation_plot
+static QString g_config_dir;
+
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
+    cerr << "Config directory : " << QFileInfo(signal_list_file("signals.txt")).absolutePath().toStdString()
+         << (g_config_dir.isEmpty() ? "  (default)" : "  (specified by argument)") << endl;
     load_colors();      // plot_init などで色を使う前に、settings.ini の色を読む
 
     // File メニューの Detrend。corrdata を作る前から状態を参照するので、先に作る(初期値はオフ)
@@ -185,9 +190,17 @@ MainWindow::MainWindow(QWidget *parent)
     QTimer::singleShot(0, this, SLOT(check_config_files()));
 }
 
+void MainWindow::set_config_dir(const QString &dir)
+{
+    g_config_dir = dir;
+}
+
 QString MainWindow::signal_list_file(const QString &name)
 {
-    return QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation) + "/" + name;
+    QString dir = g_config_dir.isEmpty()
+            ? QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation)
+            : g_config_dir;
+    return dir + "/" + name;
 }
 
 // 1行1信号のテキストファイルから list を読み込む。
@@ -1955,7 +1968,7 @@ void MainWindow::createActions()
     fileMenu->addAction(tagOffsetAct);
 
     QAction *openCfgAct = new QAction(tr("Open &Config Files (pluma)"), this);
-    openCfgAct->setStatusTip(tr("Open all text files in ~/.config/Correlation_plot with pluma"));
+    openCfgAct->setStatusTip(tr("Open all text files in the config directory with pluma"));
     connect(openCfgAct, &QAction::triggered, this, &MainWindow::open_config_files);
     fileMenu->addAction(openCfgAct);
 

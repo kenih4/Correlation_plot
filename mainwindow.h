@@ -24,6 +24,7 @@ public:
     ~MainWindow();
     bool eventFilter(QObject *obj, QEvent *event) override;
     void create_tree();
+    static void set_config_dir(const QString &dir);   // 設定ファイルのディレクトリ(既定は ~/.config/Correlation_plot)を変える
     QStringList load_group_list();      // 信号ツリーのグループ名(tree_groups.txt、無ければ既定)
 private slots:
     void on_pushButton_clicked();
