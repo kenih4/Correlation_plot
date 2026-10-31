@@ -1725,6 +1725,7 @@ void MainWindow::on_V_highlight_editingFinished()
 
 void MainWindow::plot_data(QCustomPlot *plot,int n)
 {
+    if(n<0 || n>=corrdata->sig_size() || corrdata->sig_size()<1 || corrdata->data_size()<1)return;
     QVector<double> x(corrdata->data_size()),y(corrdata->data_size());
     QFont legendFont = font();
     legendFont.setPointSize(9);
@@ -2118,6 +2119,7 @@ void MainWindow::on_pushButton_3_clicked()
 
 void MainWindow::plot_data(QCustomPlot *plot,int n,int beg,int end)
 {
+    if(n<0 || n>=corrdata->sig_size() || corrdata->sig_size()<1 || corrdata->data_size()<1)return;
     QFont legendFont = font();
     legendFont.setPointSize(9);
     int m=0;

@@ -76,10 +76,13 @@ public:
     void db_get_sync_data();
     int data_size(){return size;};
     int sig_size(){return sig.size();};
-    const string &sig_name(int n){return sig[n].name;};
-    const string &sig_d_name(int n){return sig_d[n].name;};
+    // 範囲外の番号でも落ちないようにする(空の名前を返す)
+    const string &sig_name(int n){return (n>=0 && n<(int)sig.size()) ? sig[n].name : empty_name;};
+    const string &sig_d_name(int n){return (n>=0 && n<(int)sig_d.size()) ? sig_d[n].name : empty_name;};
     double value(const string &signame,int n){
-        if(dflg != 0 && signame==sig[0].name){
+        if(n<0 || n>=(int)data.size())return 0.0;       // ショット番号が範囲外
+        // Calc efficiency(dflg)は、基準信号を分母信号(sig_d の先頭)で割る。信号や分母が無ければ元の値を返す
+        if(dflg != 0 && !sig.empty() && !sig_d.empty() && signame==sig[0].name){
             return data[n].value[signame]/data[n].denominator[sig_d[0].name]*100;
         }else{
             return data[n].value[signame];
@@ -151,6 +154,7 @@ private:
     vector<int> rank;
     int dflg;
     unsigned ver = 0;
+    string empty_name;
     long long off_sacla = 0;    // sacla_tag のオフセット
     long long off_sr = 0;       // sr_tag のオフセット
     long long eff_sacla(int n){return data[n].sacla_tag!=0 ? data[n].sacla_tag+off_sacla : 0;};   // オフセット込みで照合するタグ

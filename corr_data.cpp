@@ -48,6 +48,7 @@ void Corr_data::get_tag(string endtime)
     uint64_t btime;
 
     status = db_get_data_num_f(sep5u.c_str(),endtime.c_str(),size,&get_inf_sep5u,&get_inf_cnt_sep5u);
+    if(status==0 && get_inf_cnt_sep5u>(int)data.size())get_inf_cnt_sep5u = (int)data.size();     // 要求より多く返されても data の外へは書かない
     if(status==0 && get_inf_cnt_sep5u>0){
         for(int i=0;i<get_inf_cnt_sep5u;i++){
             DLOG<<(get_inf_sep5u+i)->evno << "  " << (get_inf_sep5u+i)->tdata<<endl;
@@ -682,7 +683,7 @@ double Corr_data::get_min(int n,double ratio,int a,double th)
 }
 
 int Corr_data::get_ranking(int ranking,bool flg){
-    int ret;
+    int ret = 0;        // 該当する順位が無いとき(信号の数より大きい順位など)は 0(基準信号)を返す
     if(flg == false && rank.size() == sig.size()){
         for(int i=0;i<(int)sig.size();i++){
             if(rank[i] == ranking)ret = i;
@@ -691,6 +692,7 @@ int Corr_data::get_ranking(int ranking,bool flg){
     }else{
         ret = get_ranking(ranking);
     }
+    if(ret<0 || ret>=(int)sig.size())ret = 0;       // 念のため範囲内に収める
     return ret;
 }
 int Corr_data::get_ranking(int ranking)
