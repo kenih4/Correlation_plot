@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/icon">
+        <file>abcicon.jpg</file>
+        <file>abcicon.png</file>
+    </qresource>
+</RCC>
