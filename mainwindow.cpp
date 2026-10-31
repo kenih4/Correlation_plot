@@ -142,7 +142,7 @@ MainWindow::MainWindow(QWidget *parent)
     ui->listWidget_2->item(0)->setFont(lFont);
 
     create_tree();
-    ui->V_threshold->setText(QString::number(50));
+    ui->V_threshold->setText(QString::number(0.05));
     ui->checkBox_th->setChecked(false);
     ui->checkBox->setChecked(true);     // Auto reload
     timer = new QTimer(this);
