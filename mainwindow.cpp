@@ -143,6 +143,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     create_tree();
     ui->V_threshold->setText(QString::number(0.05));
+    ui->checkBox_add->setChecked(true);     // Add: 自動更新で増えたショットを捨てず、増やし続ける(初期値オン)
     ui->checkBox_th->setChecked(false);
     ui->checkBox->setChecked(true);     // Auto reload
     timer = new QTimer(this);
