@@ -4,7 +4,6 @@
 #include <QCommandLineParser>
 #include <QDir>
 #include <QIcon>
-#include <QImage>
 
 int main(int argc, char *argv[])
 {
@@ -12,10 +11,8 @@ int main(int argc, char *argv[])
     // 設定ファイルの保存先(既定は ~/.config/Correlation_plot)を実行ファイル名に依存させない
     QCoreApplication::setApplicationName("Correlation_plot");
 
-    // ウィンドウのアイコンは abcicon.jpg(リソースに埋め込み)。
-    // Qt の JPEG プラグインが無く、JPEG を読めない環境では、同じ絵の abcicon.png を使う
-    QImage jpg(":/icon/abcicon.jpg");
-    a.setWindowIcon(QIcon(jpg.isNull() ? ":/icon/abcicon.png" : ":/icon/abcicon.jpg"));
+    // ウィンドウのアイコン(abcicon.png。リソースに埋め込み)
+    a.setWindowIcon(QIcon(":/icon/abcicon.png"));
 
     // 設定ファイルのディレクトリは、引数で変えられる:
     //   Correlation_plot /path/to/dir
