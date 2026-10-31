@@ -80,6 +80,11 @@ private:
     bool settings_loaded = false;
     QDateTime settings_mtime;
     int mean_shots = 5;
+    // 最新Nショットの平均の重み付け(settings.ini [LatestMean] weighting / half_life)
+    enum MeanWeighting{WEIGHT_EQUAL=0,WEIGHT_LINEAR=1,WEIGHT_EXPONENTIAL=2};
+    int mean_weighting = WEIGHT_EXPONENTIAL;    // 既定: 新しいショットほど重い指数の重み
+    double mean_half_life = 2.0;                // 指数の重みの半減期(ショット数)。何ショット前で重みが半分になるか
+    double recent_weight(int k,int n) const;    // k=0 が最新のショットの重み
     double cross_sigma = 1.0;                   // 十字印を青緑にする距離(σ_hi の何倍以内か)。settings.ini [CrossColor] sigma
     bool cross_require_closer = true;           // かつ、閾値未満の平均より閾値以上の平均に近いこと。require_closer_than_low
     QMap<QCustomPlot*,QString> plot_signal;         // 散布図ごとの横軸の信号名

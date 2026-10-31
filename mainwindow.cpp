@@ -80,7 +80,7 @@ MainWindow::MainWindow(QWidget *parent)
     mean5_act = new QAction(tr("Show &Mean of Latest Shots"), this);
     mean5_act->setCheckable(true);
     mean5_act->setChecked(true);
-    mean5_act->setStatusTip(tr("Mark the mean (x and y) of the latest N shots with a cross on each scatter plot (N: settings.ini LatestMean/shots, default 5)"));
+    mean5_act->setStatusTip(tr("Mark the weighted mean (x and y) of the latest N shots with a cross on each scatter plot (newer shots weigh more; settings.ini LatestMean: shots, weighting, half_life)"));
 
     // 散布図の並び順。ラジオボタン相当の排他選択(QActionGroup)
     rank_mic_act = new QAction(tr("Rank by &MIC"), this);
@@ -712,7 +712,20 @@ static double compute_highlight_threshold(std::vector<double> v,const QString &m
     return v[lo] + (v[hi]-v[lo])*(pos-lo);
 }
 
-// 十字印の平均に使う最新のショット数。
+// 最新Nショットの平均での、k 番目に新しいショットの重み(k=0 が最新、n はショット数)。
+//   equal       : すべて 1
+//   linear      : 最新が n、最古が 1 の直線
+//   exponential : 0.5^(k/半減期)  ── 半減期 h ショット前のショットの重みが、最新の半分になる
+double MainWindow::recent_weight(int k,int n) const
+{
+    switch(mean_weighting){
+    case WEIGHT_LINEAR:      return n - k;
+    case WEIGHT_EXPONENTIAL: return std::pow(0.5,k/mean_half_life);
+    default:                 return 1.0;
+    }
+}
+
+// 十字印の平均に使う最新のショット数と、重み付け。
 // 設定ファイル ~/.config/Correlation_plot/settings.ini の
 //   [LatestMean]
 //   shots=5
@@ -725,6 +738,8 @@ int MainWindow::latest_mean_shots()
         settings_loaded = true;
         settings_mtime = mt;
         mean_shots = 5;
+        mean_weighting = WEIGHT_EXPONENTIAL;
+        mean_half_life = 0;         // 0 のままなら、N の 0.4 倍(下で決める)
         cross_sigma = 1.0;
         cross_require_closer = true;
         if(fi.exists()){
@@ -733,6 +748,16 @@ int MainWindow::latest_mean_shots()
             int n = ini_string(st,"LatestMean/shots","5").toInt(&ok);
             if(ok && n>=1 && n<=1000)mean_shots = n;
             else DLOG << "settings.ini: invalid LatestMean/shots, using 5" << endl;
+            // 平均の重み付け: weighting=equal|linear|exponential(既定 exponential)、half_life=半減期(ショット数)
+            QString wt = ini_string(st,"LatestMean/weighting","exponential").toLower();
+            if(wt=="equal")mean_weighting = WEIGHT_EQUAL;
+            else if(wt=="linear")mean_weighting = WEIGHT_LINEAR;
+            else if(wt=="exponential")mean_weighting = WEIGHT_EXPONENTIAL;
+            else cerr << "WARNING: settings.ini LatestMean/weighting must be equal, linear or exponential; using exponential" << endl;
+            bool okh = false;
+            double hl = ini_string(st,"LatestMean/half_life","").toDouble(&okh);
+            if(okh && hl>0 && hl<=1000)mean_half_life = hl;
+            else if(st.contains("LatestMean/half_life"))cerr << "WARNING: settings.ini LatestMean/half_life is invalid; using 0.4 x shots" << endl;
             // [CrossColor] 十字印を青緑にする基準
             bool ok2 = false;
             double k = ini_string(st,"CrossColor/sigma","1").toDouble(&ok2);
@@ -743,6 +768,10 @@ int MainWindow::latest_mean_shots()
             DLOG << "Load settings : " << fi.absoluteFilePath().toStdString()
                  << "  (LatestMean/shots=" << mean_shots << ")" << endl;
         }
+        // 半減期の既定は N の 0.4 倍(1/3〜1/2 の中ほど)
+        if(mean_half_life<=0)mean_half_life = 0.4*mean_shots;
+        DLOG << "Latest mean weighting : " << (mean_weighting==WEIGHT_EQUAL ? "equal" : mean_weighting==WEIGHT_LINEAR ? "linear" : "exponential")
+             << "  half_life=" << mean_half_life << endl;
     }
     return mean_shots;
 }
@@ -831,18 +860,23 @@ void MainWindow::update_recent_mean(QCustomPlot *plot,const QVector<double> &x,c
         r.mean5->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssPlus,QPen(CROSS_COLOR,2.5),QBrush(Qt::NoBrush),18));
         r.mean5->setLayer("overlay");       // 他の点より手前に描く
     }
-    double sx = 0,sy = 0;
+    // 新しいショットほど重い重み付き平均(重みは recent_weight)。k=0 が最新
+    double sx = 0,sy = 0,sw = 0;
     for(int k=0;k<N;k++){
-        sx += x[x.size()-1-k];
-        sy += y[y.size()-1-k];
+        double w = recent_weight(k,N);
+        sx += w*x[x.size()-1-k];
+        sy += w*y[y.size()-1-k];
+        sw += w;
     }
-    QVector<double> mx(1,sx/N),my(1,sy/N);
+    sx /= sw;
+    sy /= sw;
+    QVector<double> mx(1,sx),my(1,sy);
     r.mean5->setData(mx,my);
     // Highlight がオンで、横軸の平均が「優秀なショットの平均」に近ければ、青緑に太くして目立たせる
     bool near = false;
     if(ui->checkBox_highlight->isChecked() && scatter_xy.contains(plot)){
         const ScatterData &s = scatter_xy[plot];
-        near = near_good_mean(s,sx/N);
+        near = near_good_mean(s,sx);
     }
     r.mean5->setScatterStyle(near
         ? QCPScatterStyle(QCPScatterStyle::ssPlus,QPen(cross_near_color(),3.5),QBrush(Qt::NoBrush),22)
