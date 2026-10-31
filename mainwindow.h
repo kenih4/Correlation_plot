@@ -53,6 +53,7 @@ private slots:
     void stats_toggled(bool checked);        // File メニューの Stats
     void on_checkBox_highlight_toggled(bool checked);
     void on_V_highlight_editingFinished();
+    void on_checkBox_gravity_toggled(bool checked);
     void detrend_toggled(bool checked);   // File メニューの Detrend
     void show_importance();     // File メニューの Importance
     void show_tag_offset();     // File メニューの Tag Offset...(sacla_tag, sr_tag のオフセット)
@@ -81,7 +82,6 @@ private:
     int mean_shots = 5;
     double cross_sigma = 1.0;                   // 十字印を青緑にする距離(σ_hi の何倍以内か)。settings.ini [CrossColor] sigma
     bool cross_require_closer = true;           // かつ、閾値未満の平均より閾値以上の平均に近いこと。require_closer_than_low
-    bool near_good_mean(const QVector<double> &x,const QVector<char> &hi,double xbar);
     QMap<QCustomPlot*,QString> plot_signal;         // 散布図ごとの横軸の信号名
     struct MeanLines{
         QCPItemStraightLine *hi = nullptr;  // 閾値以上の点の x の平均(青緑)
@@ -155,6 +155,10 @@ private:
         QVector<int> shot;      // 各点がもとのどのショット(データの添字)か。昇順
     };
     QMap<QCustomPlot*,ScatterData> scatter_xy;
+    // 閾値以上(または未満)のショットの x の代表値。Gravity がオフなら平均、オンなら縦軸の値(yref)を重みにした重心
+    struct GroupStat{int n = 0;double center = 0;double sd = 0;};
+    GroupStat group_stat(const ScatterData &s,bool hi_group,bool gravity);
+    bool near_good_mean(const ScatterData &s,double xbar);
     QMap<QCustomPlot*,QCPGraph*> highlight_graph;
     QMap<QCustomPlot*,QCPGraph*> hover_graph;   // トレンドグラフで指した点に対応する散布図の点を囲む輪(青緑)
     int hover_shot = -1;

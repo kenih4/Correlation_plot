@@ -363,6 +363,19 @@
               </item>
              </layout>
             </item>
+            <item>
+             <widget class="QCheckBox" name="checkBox_gravity">
+              <property name="enabled">
+               <bool>false</bool>
+              </property>
+              <property name="toolTip">
+               <string>Use the center of gravity weighted by the vertical-axis value instead of the plain mean (enabled only while Highlight is on)</string>
+              </property>
+              <property name="text">
+               <string>Gravity</string>
+              </property>
+             </widget>
+            </item>
            </layout>
           </item>
           <item>

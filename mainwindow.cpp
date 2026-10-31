@@ -748,32 +748,68 @@ int MainWindow::latest_mean_shots()
     return mean_shots;
 }
 
-// 十字印の x 座標(最新Nショットの平均 xbar)が、閾値以上のショットの x の平均に「近い」かどうか。
-//   (A) |xbar − μ_hi| ≤ k × σ_hi        σ_hi: 閾値以上のショットの x の標準偏差
-//   (B) |xbar − μ_hi| < |xbar − μ_lo|   閾値未満の平均より閾値以上の平均に近い(require_closer_than_low)
-// 閾値以上のショットが5未満、または σ_hi が 0 のときは判定しない(false)。
-bool MainWindow::near_good_mean(const QVector<double> &x,const QVector<char> &hi,double xbar)
+// 閾値以上(または未満)のショットの x の代表値と標準偏差。
+//   Gravity オフ: 平均と標準偏差
+//   Gravity オン: 縦軸の値(yref。Detrend 中も引く前の元の値)を重みにした重心と、重心まわりの重み付き標準偏差。
+//                 重みが正の点だけを使い、重みの合計が 0 以下なら平均に戻す
+// n は有限な x の個数。
+MainWindow::GroupStat MainWindow::group_stat(const ScatterData &s,bool hi_group,bool gravity)
 {
-    double sum_hi = 0,sum_lo = 0;
-    int n_hi = 0,n_lo = 0;
-    for(int i=0;i<x.size() && i<hi.size();i++){
-        if(!std::isfinite(x[i]))continue;
-        if(hi[i]){sum_hi += x[i];n_hi++;}
-        else{sum_lo += x[i];n_lo++;}
+    GroupStat g;
+    double sum = 0;
+    for(int i=0;i<s.x.size() && i<s.hi.size();i++){
+        if(!std::isfinite(s.x[i]) || (s.hi[i]!=0)!=hi_group)continue;
+        sum += s.x[i];
+        g.n++;
     }
-    if(n_hi<5)return false;
-    double mu_hi = sum_hi/n_hi;
-    double var = 0;
-    for(int i=0;i<x.size() && i<hi.size();i++){
-        if(hi[i] && std::isfinite(x[i]))var += (x[i]-mu_hi)*(x[i]-mu_hi);
+    if(g.n==0)return g;
+    g.center = sum/g.n;
+
+    bool weighted = false;
+    if(gravity){
+        double sw = 0,swx = 0;
+        for(int i=0;i<s.x.size() && i<s.hi.size() && i<s.yref.size();i++){
+            if(!std::isfinite(s.x[i]) || (s.hi[i]!=0)!=hi_group)continue;
+            double w = s.yref[i];
+            if(!std::isfinite(w) || w<=0)continue;
+            sw += w;
+            swx += w*s.x[i];
+        }
+        if(sw>0){
+            g.center = swx/sw;
+            weighted = true;
+        }
     }
-    double sd = sqrt(var/n_hi);
-    if(sd<=0)return false;
-    double d_hi = fabs(xbar-mu_hi);
-    if(d_hi > cross_sigma*sd)return false;
-    if(cross_require_closer && n_lo>0){
-        double mu_lo = sum_lo/n_lo;
-        if(!(d_hi < fabs(xbar-mu_lo)))return false;
+
+    double var = 0,wsum = 0;
+    for(int i=0;i<s.x.size() && i<s.hi.size();i++){
+        if(!std::isfinite(s.x[i]) || (s.hi[i]!=0)!=hi_group)continue;
+        double w = 1;
+        if(weighted){
+            w = (i<s.yref.size() && std::isfinite(s.yref[i]) && s.yref[i]>0) ? s.yref[i] : 0;
+        }
+        var += w*(s.x[i]-g.center)*(s.x[i]-g.center);
+        wsum += w;
+    }
+    g.sd = wsum>0 ? sqrt(var/wsum) : 0;
+    return g;
+}
+
+// 十字印の x 座標(最新Nショットの平均 xbar)が、閾値以上のショットの x の平均(Gravity オンなら重心)に「近い」かどうか。
+//   (A) |xbar − μ_hi| ≤ k × σ_hi        σ_hi: 閾値以上のショットの x の標準偏差
+//   (B) |xbar − μ_hi| < |xbar − μ_lo|   閾値未満の中心より閾値以上の中心に近い(require_closer_than_low)
+// 閾値以上のショットが5未満、または σ_hi が 0 のときは判定しない(false)。
+bool MainWindow::near_good_mean(const ScatterData &s,double xbar)
+{
+    bool gravity = ui->checkBox_gravity->isChecked() && ui->checkBox_gravity->isEnabled();
+    GroupStat hi = group_stat(s,true,gravity);
+    GroupStat lo = group_stat(s,false,gravity);
+    if(hi.n<5)return false;
+    if(hi.sd<=0)return false;
+    double d_hi = fabs(xbar-hi.center);
+    if(d_hi > cross_sigma*hi.sd)return false;
+    if(cross_require_closer && lo.n>0){
+        if(!(d_hi < fabs(xbar-lo.center)))return false;
     }
     return true;
 }
@@ -807,7 +843,7 @@ void MainWindow::update_recent_mean(QCustomPlot *plot,const QVector<double> &x,c
     bool near = false;
     if(ui->checkBox_highlight->isChecked() && scatter_xy.contains(plot)){
         const ScatterData &s = scatter_xy[plot];
-        near = near_good_mean(s.x,s.hi,sx/N);
+        near = near_good_mean(s,sx/N);
     }
     r.mean5->setScatterStyle(near
         ? QCPScatterStyle(QCPScatterStyle::ssPlus,QPen(cross_near_color(),3.5),QBrush(Qt::NoBrush),22)
@@ -1073,13 +1109,12 @@ void MainWindow::update_mean_lines(QCustomPlot *plot)
         return;
     }
     const ScatterData &s = scatter_xy[plot];
-    double sum_hi = 0,sum_lo = 0;
-    int n_hi = 0,n_lo = 0;
-    for(int i=0;i<s.x.size();i++){
-        if(!std::isfinite(s.x[i]))continue;
-        if(s.hi[i]){sum_hi += s.x[i];n_hi++;}
-        else{sum_lo += s.x[i];n_lo++;}
-    }
+    // Gravity がオンなら、平均の代わりに縦軸の値を重みにした重心を使う(Highlight がオフの間は無効)
+    bool gravity = ui->checkBox_gravity->isChecked() && ui->checkBox_gravity->isEnabled();
+    GroupStat g_hi = group_stat(s,true,gravity);
+    GroupStat g_lo = group_stat(s,false,gravity);
+    int n_hi = g_hi.n,n_lo = g_lo.n;
+    double c_hi = g_hi.center,c_lo = g_lo.center;
     auto place = [plot](QCPItemStraightLine *&line,const QColor &col,bool show,double xv){
         if(!line){
             line = new QCPItemStraightLine(plot);
@@ -1089,7 +1124,7 @@ void MainWindow::update_mean_lines(QCustomPlot *plot)
         line->point2->setCoords(xv,1);
         line->setVisible(show);
     };
-    place(m.hi,MAIN_COLOR,n_hi>0,n_hi>0 ? sum_hi/n_hi : 0);
+    place(m.hi,MAIN_COLOR,n_hi>0,c_hi);
 
     // 青緑の線(閾値以上の平均)と、閾値未満の平均の位置の間を薄い灰色で塗る(両方の平均があるときだけ)。
     // 閾値未満の平均の線は引かない。y は軸の上端〜下端いっぱい
@@ -1105,7 +1140,7 @@ void MainWindow::update_mean_lines(QCustomPlot *plot)
     }
     bool both = n_hi>0 && n_lo>0;
     if(both){
-        double xa = sum_hi/n_hi,xb = sum_lo/n_lo;
+        double xa = c_hi,xb = c_lo;
         m.band->topLeft->setCoords(std::min(xa,xb),0);
         m.band->bottomRight->setCoords(std::max(xa,xb),1);
     }
@@ -1125,7 +1160,7 @@ void MainWindow::update_mean_lines(QCustomPlot *plot)
         m.hi_text->setFont(f);
     }
     bool show_label = n_hi>0 && mean_label_enabled(plot_signal.value(plot));
-    if(show_label)m.hi_text->setText(QString("mean(>=) : %1").arg(sum_hi/n_hi,0,'g',5));
+    if(show_label)m.hi_text->setText(QString("%1(>=) : %2").arg(gravity ? "gravity" : "mean").arg(c_hi,0,'g',5));
     m.hi_text->setVisible(show_label);
 }
 
@@ -1658,12 +1693,19 @@ void MainWindow::line_toggled(bool)
 // Highlight の切り替え/閾値の変更は、保持しているデータで表示だけ描き直す
 void MainWindow::on_checkBox_highlight_toggled(bool checked)
 {
+    // Gravity は Highlight がオンの間だけ使える
+    ui->checkBox_gravity->setEnabled(checked);
     // Highlight をオンにしたら、並び順を「List Order」にする(オフに戻しても並び順はそのまま)
     if(checked && !rank_list_act->isChecked()){
         rank_list_act->setChecked(true);    // 排他グループなので他の選択は外れる
         rank_mode_changed();                // 並び順を変えて描き直す
     }
     on_V_highlight_editingFinished();
+}
+
+void MainWindow::on_checkBox_gravity_toggled(bool)
+{
+    on_V_highlight_editingFinished();       // 縦線・数値・十字印の判定を描き直す
 }
 
 void MainWindow::on_V_highlight_editingFinished()
