@@ -1563,7 +1563,16 @@ void MainWindow::open_baratsuki_hikaku()
     }
     cerr << "Open : " << path.toStdString() << endl;
     if(!QProcess::startDetached(path,QStringList(),fi.absolutePath())){
-        QMessageBox::warning(this,"Correlation Plot",QString("起動できませんでした。\n\n  %1").arg(path));
+        // スクリプトの1行目に #!(シバン)が無いと、実行できない。実行ファイル(ELF)でもシバンでもなければ、ヒントを出す
+        QString hint;
+        QFile f(path);
+        if(f.open(QIODevice::ReadOnly)){
+            QByteArray head = f.read(4);
+            if(!head.startsWith("#!") && !head.startsWith("\x7f""ELF")){
+                hint = "\n\nスクリプトの場合は、1 行目に #!/bin/bash のような行(シバン)が必要です。";
+            }
+        }
+        QMessageBox::warning(this,"Correlation Plot",QString("起動できませんでした。\n\n  %1%2").arg(path).arg(hint));
     }
 }
 
