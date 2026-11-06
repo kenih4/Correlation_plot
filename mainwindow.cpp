@@ -1524,6 +1524,49 @@ void MainWindow::show_tag_offset()
     dlg->show();
 }
 
+// File メニュー「open baratsuki-hikaku」: 別の GUI を起動する。
+// 実行ファイルのフルパスは settings.ini の
+//   [Tools]
+//   baratsuki_hikaku=/full/path/to/gui
+// に書く。メニューを選ぶたびに読むので、書き換えても再起動は要らない。
+// 起動したGUIは、このアプリとは独立に動く(このアプリを閉じても残る)。作業ディレクトリは、その実行ファイルのあるディレクトリ。
+void MainWindow::open_baratsuki_hikaku()
+{
+    QString ini = signal_list_file("settings.ini");
+    QString path;
+    if(QFileInfo::exists(ini)){
+        QSettings st(ini,QSettings::IniFormat);
+        path = ini_string(st,"Tools/baratsuki_hikaku","");
+    }
+    if(path.isEmpty()){
+        QMessageBox::information(this,"Correlation Plot",
+            QString("起動する GUI のパスが、設定されていません。\n\n"
+                    "次のファイルに、フルパスで書いてください:\n  %1\n\n"
+                    "[Tools]\nbaratsuki_hikaku=/full/path/to/gui").arg(ini));
+        return;
+    }
+    QFileInfo fi(path);
+    if(!fi.isAbsolute()){
+        QMessageBox::warning(this,"Correlation Plot",
+            QString("パスは、フルパス(/ から始まるパス)で書いてください。\n\n  %1\n\n設定ファイル: %2").arg(path).arg(ini));
+        return;
+    }
+    if(!fi.exists() || !fi.isFile()){
+        QMessageBox::warning(this,"Correlation Plot",
+            QString("ファイルが見つかりません。\n\n  %1\n\n設定ファイル: %2").arg(path).arg(ini));
+        return;
+    }
+    if(!fi.isExecutable()){
+        QMessageBox::warning(this,"Correlation Plot",
+            QString("実行権限がありません。\n\n  %1").arg(path));
+        return;
+    }
+    cerr << "Open : " << path.toStdString() << endl;
+    if(!QProcess::startDetached(path,QStringList(),fi.absolutePath())){
+        QMessageBox::warning(this,"Correlation Plot",QString("起動できませんでした。\n\n  %1").arg(path));
+    }
+}
+
 // 全信号を同時に使ったランダムフォレストの重要度を表にして出す。
 // 1信号ずつのMIC/rhoと違い、似た信号の重複や他の信号の影響を踏まえた順位になる。
 void MainWindow::show_importance()
@@ -2049,6 +2092,11 @@ void MainWindow::createActions()
     openCfgAct->setStatusTip(tr("Open all text files in the config directory with pluma"));
     connect(openCfgAct, &QAction::triggered, this, &MainWindow::open_config_files);
     fileMenu->addAction(openCfgAct);
+
+    QAction *baratsukiAct = new QAction(tr("open baratsuki-hikaku"), this);
+    baratsukiAct->setStatusTip(tr("Open another GUI (the full path is set in settings.ini: [Tools] baratsuki_hikaku)"));
+    connect(baratsukiAct, &QAction::triggered, this, &MainWindow::open_baratsuki_hikaku);
+    fileMenu->addAction(baratsukiAct);
 
     fileMenu->addSeparator();
     fileMenu->addAction(rank_mic_act);

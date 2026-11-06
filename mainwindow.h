@@ -60,6 +60,7 @@ private slots:
     void check_config_files();  // 起動時に設定ファイルの有無を確認して警告する
     void load_colors();         // 起動時に settings.ini の [Colors] から色を読む(再起動で切り替わる)
     void open_config_files();   // File メニュー: 設定ディレクトリのテキストファイルを pluma で全部開く
+    void open_baratsuki_hikaku();   // File メニュー: 別の GUI(settings.ini の [Tools] baratsuki_hikaku のフルパス)を開く
     void list_context_menu(const QPoint &pos);   // Plot Signal リストの右クリックメニュー(Show mean label)
     void rank_mode_changed();       // File メニューの Rank by ... (MIC / Importance / Gap of Means)
 
