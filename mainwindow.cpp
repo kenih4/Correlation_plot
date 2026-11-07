@@ -33,10 +33,10 @@ static const char *CSV_FILE = "/home_2023/xfel/xfelopr/users/kenichi/dvlp/corr_d
 // 散布図・トレンドグラフで「強調する点・線・文字」に使う色(既定は暗い青緑。白い背景でのコントラスト比 6.5)。
 // settings.ini の [Colors] で変えられる(load_colors。再起動で反映)
 static QColor MAIN_COLOR(0,105,107);
-// 最新の点の色。LATEST1=最新(サイズ12)、LATEST2=2番目(9)、LATEST3=3番目(6)。4番目以降は通常の点と同じ
-static QColor LATEST1_COLOR("#8000ff");     // 紫
-static QColor LATEST2_COLOR("#0000ff");     // 青
-static QColor LATEST3_COLOR("#50c878");     // エメラルドグリーン
+// 最新の点の色。LATEST1=最新(サイズ15)、LATEST2=2番目(13)、LATEST3=3番目(11)。4番目以降は通常の点と同じ
+static QColor LATEST1_COLOR("#ff0000");     // 赤
+static QColor LATEST2_COLOR("#b3424a");     // えんじ色
+static QColor LATEST3_COLOR("#8000ff");     // 紫
 // 十字印が「優秀なショットの平均に近い」(閾値以上の)ときの色。settings.ini の cross_near で指定。
 // 指定が無ければ、強調の色(MAIN_COLOR)と同じ
 static QColor CROSS_NEAR_COLOR;
@@ -454,11 +454,11 @@ void MainWindow::plot_init(QCustomPlot *plot)
     plot->addGraph();
     plot->graph(1)->setPen(QPen(LATEST2_COLOR));
     plot->graph(1)->setLineStyle(QCPGraph::lsNone);
-    plot->graph(1)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,LATEST2_COLOR,LATEST2_COLOR,9));
+    plot->graph(1)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,LATEST2_COLOR,LATEST2_COLOR,13));
     plot->addGraph();
     plot->graph(2)->setPen(QPen(LATEST1_COLOR));
     plot->graph(2)->setLineStyle(QCPGraph::lsNone);
-    plot->graph(2)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,LATEST1_COLOR,LATEST1_COLOR,12));
+    plot->graph(2)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,LATEST1_COLOR,LATEST1_COLOR,15));
 
 }
 void MainWindow::plot_trend(QCustomPlot *plot)
@@ -616,7 +616,7 @@ void MainWindow::set_info_text(QCustomPlot *plot,int n,const QString &best,const
 }
 
 // 最新の3点を色分けして重ねる(色は settings.ini の [Colors] latest1〜latest3):
-// 最新=紫(サイズ12, graph(2))、2番目=青(9, graph(1))、3番目=エメラルドグリーン(6)。
+// 最新=赤(サイズ15, graph(2))、2番目=えんじ色(13, graph(1))、3番目=紫(11)。
 // 4番目以降は通常の点と同じ(青緑の輪、Highlight なら塗りつぶし/灰色の輪、Gradient ならその色)
 void MainWindow::set_recent_points(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y)
 {
@@ -625,7 +625,7 @@ void MainWindow::set_recent_points(QCustomPlot *plot,const QVector<double> &x,co
         r.g3 = plot->addGraph();
         r.g3->setPen(QPen(LATEST3_COLOR));
         r.g3->setLineStyle(QCPGraph::lsNone);
-        r.g3->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,LATEST3_COLOR,LATEST3_COLOR,6));
+        r.g3->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,LATEST3_COLOR,LATEST3_COLOR,11));
         // 最新3点は、後から作られる青緑の点(Highlight)やグラデーションの点に隠れて白抜きに見えないよう、
         // 常に手前(overlay レイヤー)に描く。後から移したものほど手前なので、最新の点が一番上になる
         r.g3->setLayer("overlay");
@@ -664,9 +664,9 @@ static QString ini_string(QSettings &st,const QString &key,const QString &def)
 // 起動時に settings.ini の [Colors] から、強調の色と最新の点の色を読む(再起動で切り替わる)。
 //   [Colors]
 //   highlight=#00696B     ; 閾値以上の点・縦線・数値・十字印などの色
-//   latest1=#8000ff       ; 最新の点(サイズ12)
-//   latest2=#0000ff       ; 2番目の点(サイズ9)
-//   latest3=#50c878       ; 3番目の点(サイズ6)
+//   latest1=#ff0000       ; 最新の点(サイズ15)
+//   latest2=#b3424a       ; 2番目の点(サイズ13)
+//   latest3=#8000ff       ; 3番目の点(サイズ11)
 //   cross_near=#00696B    ; 十字印が優秀なショットの平均に近いとき(閾値以上のとき)の色。無ければ highlight と同じ
 //   cross=#000000         ; 十字印が近くないときの色(既定は黒)
 // 色は「#RRGGBB」または色名(teal, red など)。無い/不正なキーは既定の色のまま。
@@ -1202,7 +1202,7 @@ void MainWindow::update_mean_lines(QCustomPlot *plot)
 //   Gradient  : 最古=青緑 → 最新=青 のグラデーション。1点ごとの色指定はできないので、
 //               色ごとのグラフ(GRADIENT_BINS個)に点を振り分ける
 //   Highlight : 閾値以上の点だけ色を付け(青緑、またはGradient)、それ以外は灰色(graph(0))にする
-// 最新3点の色(紫/青/エメラルドグリーン)は別のグラフで重ねているので、どの設定でも変わらない。
+// 最新3点の色(赤/えんじ色/紫)は別のグラフで重ねているので、どの設定でも変わらない。
 void MainWindow::apply_display(QCustomPlot *plot)
 {
     apply_display_impl(plot);
