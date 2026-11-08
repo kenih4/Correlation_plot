@@ -32,10 +32,12 @@ static const char *CSV_FILE = "/home_2023/xfel/xfelopr/users/kenichi/dvlp/corr_d
 #include <algorithm>
 
 // ===== テーマ(配色) =====
-// settings.ini の [Theme] name で選ぶ(再起動で反映):
-//   dark    : 暗い背景に合わせた配色(既定)
-//   classic : 以前の、白い背景のグラフ
-// さらに [Colors](load_colors)で、強調の色と最新の点の色を、個別に上書きできる。
+// メニューバーの Theme メニューで、実行中に切り替えられる(選んだものは設定ディレクトリの theme.txt に覚える)。
+// 起動時の既定は、theme.txt、無ければ settings.ini の [Theme] name、それも無ければ dark:
+//   dark          : 暗い背景(青緑)           dark-contrast : 真っ黒な背景 + 明るい原色(いちばん見やすい)
+//   dark-amber    : 暗い暖色の背景(琥珀色)   dark-navy     : 暗い紺色の背景(青)
+//   classic       : 以前の、白い背景のグラフ
+// さらに [Colors](load_colors)で、強調の色と最新の点の色を個別に上書きできる(classic のときだけ)。
 struct Theme{
     bool dark = true;
     // GUI
@@ -46,7 +48,12 @@ struct Theme{
     QColor band,label_bg,label_border,curve_line,grad_end;
     int point_size = 5;         // 通常の点のサイズ
     double point_pen = 1.0;     // 点の輪の線の太さ
+    int fill_alpha = 70;        // 輪の中を塗る色の不透明度(0〜255)。ダークテーマのみ
 };
+// メニューに出すテーマ(名前, 表示名)
+static const QList<QPair<QString,QString>> THEME_LIST = {
+    {"dark","Dark (Teal)"},{"dark-contrast","Dark High Contrast"},{"dark-amber","Dark Amber"},{"dark-navy","Dark Navy"},{"classic","Classic (Light)"}};
+static QString g_theme_name = "dark";
 static Theme T;
 
 // 強調する点・線・文字に使う色。最新の点の色: LATEST1=最新(サイズ15)、LATEST2=2番目(13)、LATEST3=3番目(11)。
@@ -60,10 +67,26 @@ static QColor cross_near_color(){return CROSS_NEAR_COLOR.isValid() ? CROSS_NEAR_
 // 十字印が「近くない」ときの色。settings.ini の cross で指定
 static QColor CROSS_COLOR;
 
-static void set_theme(const QString &name)
+static void set_theme(QString name)
 {
+    bool known = false;
+    for(const auto &t : THEME_LIST)if(t.first==name)known = true;
+    if(!known)name = "dark";
+    g_theme_name = name;
     T = Theme();
     CROSS_NEAR_COLOR = QColor();
+    // 暗いテーマ共通の組み立て: GUI 6色 + グラフ 3色
+    auto base = [](const char *window,const char *panel,const char *border,const char *text,const char *muted,const char *accent,
+                   const char *grid,const char *axis){
+        T.dark = true;
+        T.window = QColor(window);  T.panel = QColor(panel);  T.border = QColor(border);
+        T.text = QColor(text);  T.muted = QColor(muted);  T.accent = QColor(accent);
+        T.plot_bg = T.panel;  T.grid = QColor(grid);  T.axis_line = QColor(axis);
+        T.label_bg = T.window;  T.label_bg.setAlpha(200);  T.label_border = T.border;
+        T.curve_line = T.muted;
+        T.band = QColor(160,170,190,45);
+        T.point_size = 7;  T.point_pen = 1.5;       // 暗い背景では、小さく細い点は見えにくい
+    };
     if(name=="classic"){
         T.dark = false;
         T.window = QColor(240,240,240);  T.panel = Qt::white;  T.border = QColor(200,200,200);
@@ -75,15 +98,31 @@ static void set_theme(const QString &name)
         MAIN_COLOR = QColor(0,105,107);
         LATEST1_COLOR = QColor("#ff0000");  LATEST2_COLOR = QColor("#b3424a");  LATEST3_COLOR = QColor("#8000ff");
         CROSS_COLOR = Qt::black;
-    }else{      // dark
-        T.dark = true;
-        T.window = QColor("#0F1216");  T.panel = QColor("#171B22");  T.border = QColor("#262C36");
-        T.text = QColor("#E6EAF0");  T.muted = QColor("#8A94A6");  T.accent = QColor("#2EC4B6");
-        T.plot_bg = QColor("#171B22");  T.grid = QColor("#232A33");  T.axis_line = QColor("#3A4350");
-        T.normal_point = QColor("#8190A5");
-        T.point_size = 7;  T.point_pen = 1.5;       // 暗い背景では、小さく細い点は見えにくい
-        T.band = QColor(160,170,190,45);  T.label_bg = QColor(15,18,22,200);  T.label_border = QColor("#262C36");
-        T.curve_line = QColor("#8A94A6");  T.grad_end = QColor("#4D9BFF");
+    }else if(name=="dark-contrast"){
+        // 真っ黒な背景に、彩度の高い明るい色。点は大きく、輪は太く
+        base("#000000","#000000","#3A3A3A","#FFFFFF","#C8C8C8","#00E5FF","#262626","#8C8C8C");
+        T.normal_point = QColor("#B8C0CC");  T.grad_end = QColor("#FF4DFF");
+        T.point_size = 8;  T.point_pen = 2.0;  T.fill_alpha = 90;
+        MAIN_COLOR = QColor("#00E5FF");
+        LATEST1_COLOR = QColor("#FF3B3B");  LATEST2_COLOR = QColor("#FF9F1C");  LATEST3_COLOR = QColor("#FFE600");
+        CROSS_COLOR = QColor("#FFFFFF");
+    }else if(name=="dark-amber"){
+        base("#14110F","#1D1916","#332D28","#F2E9DF","#A39485","#FFB000","#2B2520","#4A4037");
+        T.normal_point = QColor("#A8998A");  T.grad_end = QColor("#5CE1E6");
+        T.fill_alpha = 80;
+        MAIN_COLOR = QColor("#FFB000");
+        LATEST1_COLOR = QColor("#FF4D4D");  LATEST2_COLOR = QColor("#FF7AB6");  LATEST3_COLOR = QColor("#7AD7FF");
+        CROSS_COLOR = QColor("#FFFFFF");
+    }else if(name=="dark-navy"){
+        base("#0B1220","#111B2E","#22314D","#E8F0FF","#9AAECF","#4DA3FF","#1C2A44","#3B4F73");
+        T.normal_point = QColor("#93A8CC");  T.grad_end = QColor("#FF7AD9");
+        T.fill_alpha = 80;
+        MAIN_COLOR = QColor("#4DA3FF");
+        LATEST1_COLOR = QColor("#FF5A5F");  LATEST2_COLOR = QColor("#FFA94D");  LATEST3_COLOR = QColor("#C084FC");
+        CROSS_COLOR = QColor("#FFFFFF");
+    }else{      // dark (Teal)
+        base("#0F1216","#171B22","#262C36","#E6EAF0","#8A94A6","#2EC4B6","#232A33","#3A4350");
+        T.normal_point = QColor("#8190A5");  T.grad_end = QColor("#4D9BFF");
         MAIN_COLOR = QColor("#2EC4B6");
         LATEST1_COLOR = QColor("#FF5A5F");  LATEST2_COLOR = QColor("#E8646E");  LATEST3_COLOR = QColor("#B794FF");
         CROSS_COLOR = QColor("#E6EAF0");
@@ -93,7 +132,7 @@ static void set_theme(const QString &name)
 // 散布図の点のスタイル(丸)。filled なら塗りつぶし、そうでなければ輪(ダークテーマでは、中を半透明に塗って見やすくする)
 static QCPScatterStyle point_style(const QColor &col,bool filled)
 {
-    QColor fill = filled ? col : (T.dark ? QColor(col.red(),col.green(),col.blue(),70) : T.plot_bg);
+    QColor fill = filled ? col : (T.dark ? QColor(col.red(),col.green(),col.blue(),T.fill_alpha) : T.plot_bg);
     return QCPScatterStyle(QCPScatterStyle::ssCircle,QPen(col,T.point_pen),QBrush(fill),T.point_size);
 }
 
@@ -762,6 +801,7 @@ static QString ini_string(QSettings &st,const QString &key,const QString &def)
 // 色は「#RRGGBB」または色名(teal, red など)。無い/不正なキーは既定の色のまま。
 void MainWindow::load_colors()
 {
+    if(T.dark)return;       // [Colors] の上書きは classic のときだけ(暗いテーマは、見やすさのために色の組み合わせを決めてあるので)
     QFileInfo fi(signal_list_file("settings.ini"));
     if(!fi.exists())return;
     QSettings st(fi.absoluteFilePath(),QSettings::IniFormat);
@@ -788,28 +828,54 @@ void MainWindow::load_theme()
     if(fi.exists()){
         QSettings st(fi.absoluteFilePath(),QSettings::IniFormat);
         name = ini_string(st,"Theme/name","dark").toLower();
-        if(name!="dark" && name!="classic"){
-            cerr << "WARNING: settings.ini Theme/name must be dark or classic; using dark" << endl;
+        bool ok = false;
+        for(const auto &t : THEME_LIST)if(t.first==name)ok = true;
+        if(!ok){
+            cerr << "WARNING: settings.ini Theme/name must be dark, dark-contrast, dark-amber, dark-navy or classic; using dark" << endl;
             name = "dark";
         }
     }
+    QFile f(signal_list_file("theme.txt"));      // Theme メニューで最後に選んだもの(ini より優先)
+    if(f.open(QIODevice::ReadOnly | QIODevice::Text)){
+        QString s = QString::fromUtf8(f.readLine()).trimmed();
+        for(const auto &t : THEME_LIST)if(t.first==s)name = s;
+    }
     set_theme(name);
-    cerr << "Theme : " << name.toStdString() << endl;
+    cerr << "Theme : " << g_theme_name.toStdString() << endl;
 }
 
 // ダークテーマ: Fusion スタイル + 暗いパレット + スタイルシート(ボタン、入力欄、リスト、メニュー、スクロールバー、進捗バーなど)。
 // スピンボックスやチェックボックスは、スタイルシートで枠を指定すると矢印や印が消えることがあるので、パレットだけで色を付ける
 void MainWindow::apply_theme_widgets()
 {
-    if(!T.dark)return;
+    // 起動直後のスタイルを覚えておき、classic に戻すときに使う
+    static QString orig_style;
+    if(orig_style.isEmpty())orig_style = QApplication::style()->objectName();
+    if(!T.dark){
+        QApplication::setStyle(orig_style);
+        QApplication::setPalette(QApplication::style()->standardPalette());
+        qApp->setStyleSheet(QString());
+        return;
+    }
+    auto mix = [](const QColor &a,const QColor &b,double t){      // a に b を t の割合で混ぜる
+        return QColor(qRound(a.red()*(1-t)+b.red()*t),qRound(a.green()*(1-t)+b.green()*t),qRound(a.blue()*(1-t)+b.blue()*t));
+    };
+    const QColor base = T.window;                       // 入力欄・リストの背景
+    const QColor button = T.panel.lighter(125);
+    const QColor bborder = T.border.lighter(140);
+    const QColor hover = button.lighter(120);
+    const QColor pressed = button.darker(125);
+    const QColor sel = mix(T.window,T.accent,0.30);     // リストの選択行
+    const QColor off = mix(T.muted,T.window,0.55);      // 無効な文字
+    const QColor handle = bborder, handle_h = bborder.lighter(130);
     QApplication::setStyle("Fusion");
     QPalette p;
     p.setColor(QPalette::Window,T.window);
     p.setColor(QPalette::WindowText,T.text);
-    p.setColor(QPalette::Base,QColor("#0F1216"));
+    p.setColor(QPalette::Base,base);
     p.setColor(QPalette::AlternateBase,T.panel);
     p.setColor(QPalette::Text,T.text);
-    p.setColor(QPalette::Button,QColor("#232A35"));
+    p.setColor(QPalette::Button,button);
     p.setColor(QPalette::ButtonText,T.text);
     p.setColor(QPalette::ToolTipBase,T.panel);
     p.setColor(QPalette::ToolTipText,T.text);
@@ -817,62 +883,158 @@ void MainWindow::apply_theme_widgets()
     p.setColor(QPalette::Highlight,T.accent);
     p.setColor(QPalette::HighlightedText,T.window);
     p.setColor(QPalette::Link,T.accent);
-    p.setColor(QPalette::Light,QColor("#2F3744"));
-    p.setColor(QPalette::Dark,QColor("#0A0D10"));
-    p.setColor(QPalette::Mid,QColor("#1B222B"));
-    p.setColor(QPalette::Disabled,QPalette::WindowText,QColor("#5B6572"));
-    p.setColor(QPalette::Disabled,QPalette::Text,QColor("#5B6572"));
-    p.setColor(QPalette::Disabled,QPalette::ButtonText,QColor("#5B6572"));
+    p.setColor(QPalette::Light,button.lighter(130));
+    p.setColor(QPalette::Dark,T.window.darker(150));
+    p.setColor(QPalette::Mid,pressed);
+    p.setColor(QPalette::Disabled,QPalette::WindowText,off);
+    p.setColor(QPalette::Disabled,QPalette::Text,off);
+    p.setColor(QPalette::Disabled,QPalette::ButtonText,off);
     QApplication::setPalette(p);
 
     qApp->setStyleSheet(QString(
         "QToolTip{background:%1;color:%2;border:1px solid %3;}"
-        "QPushButton{background:#232A35;border:1px solid #2F3744;border-radius:6px;padding:2px 10px;}"
-        "QPushButton:hover{background:#2C3542;border-color:%4;}"
-        "QPushButton:pressed{background:#1B222B;}"
-        "QPushButton:disabled{color:#5B6572;}"
-        "QLineEdit{background:#0F1216;border:1px solid #2F3744;border-radius:4px;padding:1px 4px;"
+        "QPushButton{background:%7;border:1px solid %8;border-radius:6px;padding:2px 10px;}"
+        "QPushButton:hover{background:%9;border-color:%4;}"
+        "QPushButton:pressed{background:%10;}"
+        "QPushButton:disabled{color:%11;}"
+        "QLineEdit{background:%12;border:1px solid %8;border-radius:4px;padding:1px 4px;"
         "selection-background-color:%4;selection-color:%5;}"
         "QLineEdit:focus{border-color:%4;}"
-        "QListWidget,QTreeWidget,QTableWidget{background:#0F1216;border:1px solid %3;border-radius:4px;}"
-        "QListWidget::item:selected,QTreeWidget::item:selected,QTableWidget::item:selected{background:#1F3B3A;color:%2;}"
+        "QListWidget,QTreeWidget,QTableWidget{background:%12;border:1px solid %3;border-radius:4px;}"
+        "QListWidget::item:selected,QTreeWidget::item:selected,QTableWidget::item:selected{background:%13;color:%2;}"
         "QHeaderView::section{background:%1;color:%6;border:0;border-bottom:1px solid %3;padding:3px 6px;}"
         "QMenuBar{background:%5;}"
-        "QMenuBar::item:selected{background:#232A35;}"
+        "QMenuBar::item:selected{background:%7;}"
         "QMenu{background:%1;border:1px solid %3;}"
         "QMenu::item{padding:4px 22px;}"
         "QMenu::item:selected{background:%4;color:%5;}"
         "QMenu::separator{height:1px;background:%3;margin:4px 8px;}"
         "QScrollBar:vertical{background:%5;width:10px;margin:0;}"
-        "QScrollBar::handle:vertical{background:#2F3744;border-radius:5px;min-height:24px;}"
-        "QScrollBar::handle:vertical:hover{background:#3A4350;}"
+        "QScrollBar::handle:vertical{background:%14;border-radius:5px;min-height:24px;}"
+        "QScrollBar::handle:vertical:hover{background:%15;}"
         "QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical{height:0;}"
         "QScrollBar:horizontal{background:%5;height:10px;margin:0;}"
-        "QScrollBar::handle:horizontal{background:#2F3744;border-radius:5px;min-width:24px;}"
-        "QScrollBar::handle:horizontal:hover{background:#3A4350;}"
+        "QScrollBar::handle:horizontal{background:%14;border-radius:5px;min-width:24px;}"
+        "QScrollBar::handle:horizontal:hover{background:%15;}"
         "QScrollBar::add-line:horizontal,QScrollBar::sub-line:horizontal{width:0;}"
-        "QProgressBar{border:1px solid #2F3744;border-radius:4px;text-align:center;background:#0F1216;}"
+        "QProgressBar{border:1px solid %8;border-radius:4px;text-align:center;background:%12;}"
         "QProgressBar::chunk{background:%4;border-radius:3px;}"
         "QStatusBar{background:%5;color:%6;}"
-    ).arg(T.panel.name(),T.text.name(),T.border.name(),T.accent.name(),T.window.name(),T.muted.name()));
+    ).arg(T.panel.name(),T.text.name(),T.border.name(),T.accent.name(),T.window.name(),T.muted.name())
+     .arg(button.name(),bborder.name(),hover.name(),pressed.name(),off.name(),base.name())
+     .arg(sel.name(),handle.name(),handle_h.name()));
 }
 
 // グラフの背景・軸・格子をテーマにそろえる(ダークテーマのときだけ。classic は QCustomPlot の既定のまま)
 void MainWindow::style_plot(QCustomPlot *plot)
 {
-    if(!T.dark)return;
     plot->setBackground(QBrush(T.plot_bg));
     plot->axisRect()->setBackground(QBrush(T.plot_bg));
     for(QCPAxis *ax : {plot->xAxis,plot->yAxis}){
-        ax->setBasePen(QPen(T.axis_line,1));
-        ax->setTickPen(QPen(T.axis_line,1));
-        ax->setSubTickPen(QPen(T.axis_line,1));
+        double w = T.dark ? 1 : 0;
+        ax->setBasePen(QPen(T.axis_line,w));
+        ax->setTickPen(QPen(T.axis_line,w));
+        ax->setSubTickPen(QPen(T.axis_line,w));
         ax->setTickLabelColor(T.muted);
         ax->setLabelColor(T.text);
-        ax->grid()->setPen(QPen(T.grid,1));
+        if(T.dark){
+            ax->grid()->setPen(QPen(T.grid,1));
+            ax->grid()->setZeroLinePen(QPen(T.grid,1));
+        }else{      // QCustomPlot の既定
+            ax->grid()->setPen(QPen(QColor(200,200,200),0,Qt::DotLine));
+            ax->grid()->setZeroLinePen(QPen(QColor(99,99,99),0,Qt::SolidLine));
+        }
         ax->grid()->setSubGridVisible(false);
-        ax->grid()->setZeroLinePen(QPen(T.grid,1));
     }
+}
+
+// テーマを切り替えたとき、すでに作ってあるグラフの色を新しいテーマの色に変える(データの再計算はしない)
+void MainWindow::restyle_plot(QCustomPlot *plot)
+{
+    style_plot(plot);
+    if(plot->graphCount()>=3){
+        plot->graph(1)->setPen(QPen(LATEST2_COLOR));
+        plot->graph(1)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,LATEST2_COLOR,LATEST2_COLOR,13));
+        plot->graph(2)->setPen(QPen(LATEST1_COLOR));
+        plot->graph(2)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,LATEST1_COLOR,LATEST1_COLOR,15));
+    }
+    if(recent.contains(plot)){
+        RecentGraphs &r = recent[plot];
+        if(r.g3){
+            r.g3->setPen(QPen(LATEST3_COLOR));
+            r.g3->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,LATEST3_COLOR,LATEST3_COLOR,11));
+        }
+        if(r.line)r.line->setPen(QPen(T.curve_line,1.5));
+    }
+    if(highlight_graph.contains(plot) && highlight_graph[plot]){
+        highlight_graph[plot]->setPen(QPen(MAIN_COLOR));
+        highlight_graph[plot]->setScatterStyle(point_style(MAIN_COLOR,true));
+    }
+    if(hover_graph.contains(plot) && hover_graph[plot])
+        hover_graph[plot]->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,QPen(MAIN_COLOR,2.5),QBrush(Qt::NoBrush),18));
+    if(binned.contains(plot)){
+        BinnedItems &b = binned[plot];
+        if(b.graph){
+            b.graph->setPen(QPen(T.text,2));
+            b.graph->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssDisc,T.text,6));
+        }
+        if(b.err)b.err->setPen(QPen(T.text,1.5));
+        if(b.text){
+            b.text->setPen(QPen(T.label_border));
+            b.text->setBrush(QBrush(T.label_bg));
+            b.text->setColor(T.muted);
+        }
+    }
+    if(mean_lines.contains(plot)){
+        MeanLines &m = mean_lines[plot];
+        if(m.hi)m.hi->setPen(QPen(MAIN_COLOR,1.5));
+        if(m.band)m.band->setBrush(QBrush(T.band));
+        if(m.hi_text){
+            m.hi_text->setColor(MAIN_COLOR);
+            m.hi_text->setBrush(QBrush(T.label_bg));
+        }
+    }
+}
+
+// Theme メニューで選んだテーマに切り替える(実行中。ウィジェット、グラフ、点の色をすべて変える)
+void MainWindow::switch_theme(const QString &name)
+{
+    set_theme(name);
+    load_colors();              // classic のときだけ、settings.ini の [Colors] を反映
+    apply_theme_widgets();
+    // 設定ディレクトリの theme.txt に覚える(次回の起動で使う。settings.ini は書き換えない)
+    QString file = signal_list_file("theme.txt");
+    QDir().mkpath(QFileInfo(file).absolutePath());
+    QFile f(file);
+    if(f.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate))f.write((g_theme_name+"\n").toUtf8());
+
+    QList<QCustomPlot*> plots = {ui->widget,ui->widget_1,ui->widget_2,ui->widget_3,ui->widget_7,ui->widget_8,ui->widget_9};
+    for(QCustomPlot *p : extra_plots)plots.append(p);
+    for(QCustomPlot *p : plots)restyle_plot(p);
+    // 点の色(通常/強調/グラデーション)と十字印は、保持しているデータからすぐに描き直せる
+    for(auto it=scatter_xy.begin();it!=scatter_xy.end();++it){
+        apply_display(it.key());
+        update_recent_mean(it.key(),it.value().x,it.value().y);
+    }
+    if(tracer){
+        tracer->setPen(QPen(MAIN_COLOR));
+        tracer->setBrush(MAIN_COLOR);
+        tracerText->setColor(T.text);
+    }
+    // リストの「mean_label」の文字色
+    for(QListWidget *l : {ui->listWidget,ui->listWidget_2})
+        for(int i=0;i<l->count();i++)apply_item_style(l->item(i));
+    style_add_badge();
+    for(QCustomPlot *p : plots)p->replot();
+    statusBar()->showMessage(tr("Theme: %1").arg(g_theme_name),3000);
+}
+
+// ステータスバーの「ADD」の目印の色(テーマに合わせる)
+void MainWindow::style_add_badge()
+{
+    if(!add_badge)return;
+    add_badge->setStyleSheet(QString("background:%1;color:%2;border-radius:4px;font-weight:bold;padding:1px 6px;")
+                             .arg(T.accent.name(),T.dark ? T.window.name() : QString("#ffffff")));
 }
 
 // Highlight の閾値を、基準信号の値 v から決める。
@@ -2332,14 +2494,26 @@ void MainWindow::createActions()
     exitAct->setShortcuts(QKeySequence::Quit);
     exitAct->setStatusTip(tr("Exit the application"));
 
+    // Theme メニュー(File の隣)。排他選択。選ぶとすぐに全体の色が変わり、次回起動でも使われる
+    QMenu *themeMenu = menuBar()->addMenu(tr("&Theme"));
+    QActionGroup *themeGroup = new QActionGroup(this);
+    themeGroup->setExclusive(true);
+    for(const auto &t : THEME_LIST){
+        QAction *a = themeMenu->addAction(t.second);
+        a->setCheckable(true);
+        a->setChecked(t.first==g_theme_name);
+        a->setStatusTip(tr("Switch the color theme (remembered in theme.txt of the config directory)"));
+        themeGroup->addAction(a);
+        const QString id = t.first;
+        connect(a,&QAction::triggered,this,[this,id](){switch_theme(id);});
+    }
 }
 void MainWindow::createStatusBar()
 {
     statusBar()->showMessage(tr("Ready"));
     add_badge = new QLabel(" ADD ");
     add_badge->setToolTip(tr("Add is ON: shots are accumulated without discarding the old ones"));
-    add_badge->setStyleSheet(QString("background:%1;color:%2;border-radius:4px;font-weight:bold;padding:1px 6px;")
-                             .arg(T.accent.name(),T.dark ? T.window.name() : QString("#ffffff")));
+    style_add_badge();
     statusBar()->addPermanentWidget(add_badge);
     add_badge->setVisible(ui->checkBox_add->isChecked());
 }

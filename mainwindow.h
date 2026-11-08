@@ -64,6 +64,9 @@ private slots:
     void load_theme();          // 起動時に settings.ini の [Theme] name(dark / classic)を読んで、配色を決める
     void apply_theme_widgets(); // ダークテーマのとき、アプリ全体のパレットとスタイルシートを設定する
     void style_plot(QCustomPlot *plot);   // グラフの背景・軸・格子の色をテーマにそろえる
+    void restyle_plot(QCustomPlot *plot); // 切り替え時に、作成済みのグラフの色を新しいテーマにする
+    void switch_theme(const QString &name);   // Theme メニュー: 実行中にテーマを切り替える
+    void style_add_badge();
     void open_config_files();   // File メニュー: 設定ディレクトリのテキストファイルを pluma で全部開く
     void open_baratsuki_hikaku();   // File メニュー: 別の GUI(settings.ini の [Tools] baratsuki_hikaku のフルパス)を開く
     void list_context_menu(const QPoint &pos);   // Plot Signal リストの右クリックメニュー(Show mean label)
