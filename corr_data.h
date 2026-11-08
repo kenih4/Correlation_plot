@@ -1,6 +1,7 @@
 #ifndef CORR_DATA_H
 #define CORR_DATA_H
 #include <vector>
+#include <functional>
 #include <algorithm>
 #include <iostream>
 #include <string.h>
@@ -122,6 +123,9 @@ public:
     void set_tag_offset(long long sacla,long long sr){off_sacla = sacla;off_sr = sr;};
     long long tag_offset_sacla(){return off_sacla;};
     long long tag_offset_sr(){return off_sr;};
+    // 取得の進み具合を知らせるコールバック(Get の進捗表示用)。progress(段階, 済んだ数, 全体の数)
+    //   段階 0: タグの決定(ショットごと)、1: 信号の値の取得(ショットごと)、2: 分母の信号の値の取得(ショットごと)
+    void set_progress(std::function<void(int,int,int)> f){progress_cb = f;};
     unsigned data_version(){return ver;};   // データが変わるたびに増える(変化の検出用)
     void set_stats(bool f){stats_flg = f;};
     void set_detrend(bool f){detrend_flg = f;};
@@ -154,6 +158,8 @@ private:
     vector<int> rank;
     int dflg;
     unsigned ver = 0;
+    std::function<void(int,int,int)> progress_cb;
+    void report(int stage,int done,int total){if(progress_cb)progress_cb(stage,done,total);}
     string empty_name;
     long long off_sacla = 0;    // sacla_tag のオフセット
     long long off_sr = 0;       // sr_tag のオフセット

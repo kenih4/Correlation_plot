@@ -130,6 +130,7 @@ private:
     QString calc_signature();
     void mark_calculated();
     bool has_calculated = false;
+    bool get_busy = false;      // Get の最中(進捗表示のためイベントを処理するので、その間は自動更新を止める)
     unsigned last_version = 0;
     QString last_signature;
     void set_recent_points(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y);

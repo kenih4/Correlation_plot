@@ -81,6 +81,7 @@ void Corr_data::get_tag(string endtime)
             log_tag((get_inf_sep5u+i)->evno,data[i],
                     data[i].sacla_tag==0 ? "(route 769 not found)" : (data[i].sr_tag==0 ? "(sr_tag not found)" : ""),
                     off_sacla,off_sr);
+            report(0,i+1,get_inf_cnt_sep5u);
         }
         free(get_inf_sep5u);
     }
@@ -133,6 +134,7 @@ void Corr_data::get_tag(string begtime,string endtime)
             log_tag((get_inf_sep5u+i)->evno,data[i],
                     data[i].sacla_tag==0 ? "(route 769 not found)" : (data[i].sr_tag==0 ? "(sr_tag not found)" : ""),
                     off_sacla,off_sr);
+            report(0,i+1,get_inf_cnt_sep5u);
         }
         free(get_inf_sep5u);
     }
@@ -181,6 +183,7 @@ void Corr_data::db_get_sync_data()
                 }
             }
         }
+        report(1,n+1,size);
     }
     db_release_signal_list_all(&siglist);
     sort(data.begin(),data.end());
@@ -220,6 +223,7 @@ void Corr_data::db_get_sync_data()
                 }
             }
         }
+        report(2,n+1,size);
     }
     db_release_signal_list_all(&siglist);
 

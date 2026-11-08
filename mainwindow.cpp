@@ -10,6 +10,7 @@
 #include <QSettings>
 #include <QProcess>
 #include <QMenu>
+#include <QProgressDialog>
 #include <QSpinBox>
 #include <QFormLayout>
 #include <QDialogButtonBox>
@@ -406,8 +407,31 @@ void MainWindow::on_pushButton_clicked()
 
     }
 
+    // 進捗表示: ダイアログ(0〜100%)とステータスバー。段階ごとの割合は、タグ40%・値40%・分母10%・計算と描画10%
+    struct BusyGuard{bool &f;BusyGuard(bool &b):f(b){f = true;}~BusyGuard(){f = false;}} busy_guard(get_busy);
+    QProgressDialog prog("Get",QString(),0,100,this);
+    prog.setWindowTitle("Get");
+    prog.setWindowModality(Qt::WindowModal);        // 取得中は、このウィンドウを操作できない
+    prog.setCancelButton(nullptr);
+    prog.setMinimumDuration(300);                   // 短い取得では、ダイアログを出さない
+    auto step = [this,&prog](const QString &label,int v){
+        prog.setLabelText(label);
+        prog.setValue(v);
+        statusBar()->showMessage(label);
+        QApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+    };
+    step("Get: start",0);
+    corrdata->set_progress([&step](int stage,int done,int total){
+        static const char *names[] = {"ショットを検索してタグを決定中","信号の値を取得中","分母の信号の値を取得中"};
+        static const int base[] = {0,40,80},span[] = {40,40,10};
+        int v = base[stage] + (total>0 ? span[stage]*done/total : span[stage]);
+        step(QString("%1  %2 / %3").arg(names[stage]).arg(done).arg(total),v);
+    });
+
     corrdata->get_tag(ui->dateTimeEdit->dateTime().toString("yyyy/MM/dd HH:mm:ss").toStdString());
     corrdata->db_get_sync_data();
+    corrdata->set_progress(nullptr);               // prog が無くなる前に外す
+    step("MIC などを計算中",90);
     for(int i=0;corr_debug() && i<corrdata->data_size();i++){
         DLOG<<"beg = "<<corrdata->begtime(i)<<
               "  end = "<<corrdata->endtime(i)<<
@@ -432,6 +456,7 @@ void MainWindow::on_pushButton_clicked()
               corrdata->mic(j)<<endl;
     }
 
+    step("グラフを描画中",95);
     plot_data(ui->widget_1,corrdata->get_ranking(1));
     plot_data(ui->widget_2,corrdata->get_ranking(2));
     plot_data(ui->widget_3,corrdata->get_ranking(3));
@@ -443,7 +468,8 @@ void MainWindow::on_pushButton_clicked()
     mark_calculated();
     init_highlight_threshold();
     corrdata->outfile(CSV_FILE);
-
+    prog.setValue(100);
+    statusBar()->showMessage(QString("Get 完了: %1 ショット").arg(corrdata->data_size()));
 }
 void MainWindow::plot_init(QCustomPlot *plot)
 {
@@ -1989,6 +2015,7 @@ void MainWindow::on_pushButton_2_clicked()
 void MainWindow::update_data()
 {
     if(ui->checkBox->checkState()==0)return;
+    if(get_busy)return;     // Get の最中は、データを作り直している途中なので、自動更新しない
     // 起動後、最初の Get(または Plot)でデータを取得するまでは、自動更新しない
     if(!has_calculated)return;
 
