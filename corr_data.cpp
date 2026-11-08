@@ -39,7 +39,6 @@ void Corr_data::get_tag(string endtime)
     string sep5u = "sr_mon_screen_sep5u_otr/intensity";
     string route = "xfel_tmg_sw_master_ema_route_inf_shm/current";
     string ssbt = "sr_safety_topup_intlk_beam_ssbt1/charge";
-    Db_f_data *get_inf_sep5u;
     Db_i_data *get_inf_route;
     Db_f_data *get_inf_ssbt;
     int get_inf_cnt_sep5u = 0,get_inf_cnt_route = 0,get_inf_cnt_ssbt = 0;
@@ -47,12 +46,55 @@ void Corr_data::get_tag(string endtime)
     char out[256];
     uint64_t btime;
 
-    status = db_get_data_num_f(sep5u.c_str(),endtime.c_str(),size,&get_inf_sep5u,&get_inf_cnt_sep5u);
-    if(status==0 && get_inf_cnt_sep5u>(int)data.size())get_inf_cnt_sep5u = (int)data.size();     // 要求より多く返されても data の外へは書かない
-    if(status==0 && get_inf_cnt_sep5u>0){
+    // ショットの検索: endtime 以前の最新 size 件(新しい順)を、100件ずつに分けてさかのぼって取る。
+    // 一度に多く(300件など)要求すると、DB API が失敗することがあるため。DB の応答は、ターミナルに出す
+    vector<Db_f_data> shots;
+    {
+        const int CHUNK = 100;
+        string cur_end = endtime;
+        int remaining = (int)data.size();
+        uint64_t last_oldest = ~(uint64_t)0;            // これまでに取ったショットのうち、いちばん古い時刻(us)
+        while(remaining>0){
+            int req = min(CHUNK,remaining);
+            Db_f_data *arr = NULL;
+            int cnt = 0;
+            status = db_get_data_num_f(sep5u.c_str(),cur_end.c_str(),req,&arr,&cnt);
+            cerr << "[get] " << sep5u << "  end=" << cur_end << "  num=" << req
+                 << "  -> status=" << status << "  count=" << cnt << endl;
+            if(status!=0 || cnt<=0 || arr==NULL)break;
+            if(cnt>req)cnt = req;                       // 要求より多く返されても、使うのは要求した分だけ
+            int pushed = 0;
+            for(int k=0;k<cnt;k++){
+                // 前のまとまりと重ならないように、これまでより古いショットだけを取る
+                if((uint64_t)arr[k].unixtime_us < last_oldest){
+                    shots.push_back(arr[k]);
+                    pushed++;
+                }
+            }
+            free(arr);
+            if(pushed==0)break;
+            remaining -= pushed;
+            last_oldest = (uint64_t)shots.back().unixtime_us;
+            if(cnt<req)break;                           // もう古いデータが無い
+            // 次は、いちばん古かったショットの少し前から。時刻の文字列はミリ秒までなので、切り捨てでも
+            // 四捨五入でも、同じショットをもう一度拾わないように、5 ms 引いておく
+            db_unixtime_us_to_date(last_oldest-5000,out);
+            cur_end = out;
+        }
+    }
+    found_shots = (int)shots.size();
+    get_inf_cnt_sep5u = found_shots;
+    if(found_shots==0){
+        cerr << "[get] WARNING: no shots were found for " << sep5u << " (see the status/count above)" << endl;
+    }else if(found_shots<(int)data.size()){
+        cerr << "[get] only " << found_shots << " of " << data.size() << " requested shots are available; the rest is dropped" << endl;
+        data.resize(found_shots);                       // 空のエントリが残らないように、見つかった分だけにする
+        size = found_shots;
+    }
+    if(get_inf_cnt_sep5u>0){
         for(int i=0;i<get_inf_cnt_sep5u;i++){
-            DLOG<<(get_inf_sep5u+i)->evno << "  " << (get_inf_sep5u+i)->tdata<<endl;
-            db_unixtime_us_to_date((get_inf_sep5u+i)->unixtime_us,out);
+            DLOG<<shots[i].evno << "  " << shots[i].tdata<<endl;
+            db_unixtime_us_to_date(shots[i].unixtime_us,out);
             status = db_get_data_num_i(route.c_str(),out,60,&get_inf_route,&get_inf_cnt_route);
             if(status==0 && get_inf_cnt_route>0){
                 for(int j=0;j<get_inf_cnt_route;j++){
@@ -78,12 +120,11 @@ void Corr_data::get_tag(string endtime)
                 }
                 free(get_inf_route);
             }
-            log_tag((get_inf_sep5u+i)->evno,data[i],
+            log_tag(shots[i].evno,data[i],
                     data[i].sacla_tag==0 ? "(route 769 not found)" : (data[i].sr_tag==0 ? "(sr_tag not found)" : ""),
                     off_sacla,off_sr);
             report(0,i+1,get_inf_cnt_sep5u);
         }
-        free(get_inf_sep5u);
     }
 }
 void Corr_data::get_tag(string begtime,string endtime)

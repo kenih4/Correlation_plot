@@ -429,6 +429,7 @@ void MainWindow::on_pushButton_clicked()
     });
 
     corrdata->get_tag(ui->dateTimeEdit->dateTime().toString("yyyy/MM/dd HH:mm:ss").toStdString());
+    int found = corrdata->tag_count();
     corrdata->db_get_sync_data();
     corrdata->set_progress(nullptr);               // prog が無くなる前に外す
     step("MIC などを計算中",90);
@@ -470,6 +471,12 @@ void MainWindow::on_pushButton_clicked()
     corrdata->outfile(CSV_FILE);
     prog.setValue(100);
     statusBar()->showMessage(QString("Get 完了: %1 ショット").arg(corrdata->data_size()));
+    if(found==0){
+        QMessageBox::warning(this,"Correlation Plot",
+            "ショットが 1 つも見つかりませんでした。\n\n"
+            "日時の指定や、DB の接続を確認してください。\n"
+            "DB の応答(status と count)は、ターミナルの [get] の行に出ています。");
+    }
 }
 void MainWindow::plot_init(QCustomPlot *plot)
 {
