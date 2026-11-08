@@ -44,6 +44,8 @@ struct Theme{
     QColor plot_bg,grid,axis_line;
     QColor normal_point;    // 通常の(強調されていない)点
     QColor band,label_bg,label_border,curve_line,grad_end;
+    int point_size = 5;         // 通常の点のサイズ
+    double point_pen = 1.0;     // 点の輪の線の太さ
 };
 static Theme T;
 
@@ -78,13 +80,21 @@ static void set_theme(const QString &name)
         T.window = QColor("#0F1216");  T.panel = QColor("#171B22");  T.border = QColor("#262C36");
         T.text = QColor("#E6EAF0");  T.muted = QColor("#8A94A6");  T.accent = QColor("#2EC4B6");
         T.plot_bg = QColor("#171B22");  T.grid = QColor("#232A33");  T.axis_line = QColor("#3A4350");
-        T.normal_point = QColor("#6B7686");
+        T.normal_point = QColor("#8190A5");
+        T.point_size = 7;  T.point_pen = 1.5;       // 暗い背景では、小さく細い点は見えにくい
         T.band = QColor(160,170,190,45);  T.label_bg = QColor(15,18,22,200);  T.label_border = QColor("#262C36");
         T.curve_line = QColor("#8A94A6");  T.grad_end = QColor("#4D9BFF");
         MAIN_COLOR = QColor("#2EC4B6");
         LATEST1_COLOR = QColor("#FF5A5F");  LATEST2_COLOR = QColor("#E8646E");  LATEST3_COLOR = QColor("#B794FF");
         CROSS_COLOR = QColor("#E6EAF0");
     }
+}
+
+// 散布図の点のスタイル(丸)。filled なら塗りつぶし、そうでなければ輪(ダークテーマでは、中を半透明に塗って見やすくする)
+static QCPScatterStyle point_style(const QColor &col,bool filled)
+{
+    QColor fill = filled ? col : (T.dark ? QColor(col.red(),col.green(),col.blue(),70) : T.plot_bg);
+    return QCPScatterStyle(QCPScatterStyle::ssCircle,QPen(col,T.point_pen),QBrush(fill),T.point_size);
 }
 
 // 設定ファイルのディレクトリ。実行時の引数で指定されたときはそれ、なければ ~/.config/Correlation_plot
@@ -529,7 +539,7 @@ void MainWindow::plot_init(QCustomPlot *plot)
     plot->addGraph();
     plot->graph(0)->setPen(QPen(MAIN_COLOR));
     plot->graph(0)->setLineStyle(QCPGraph::lsNone);
-    plot->graph(0)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle, MAIN_COLOR, T.plot_bg, 5));
+    plot->graph(0)->setScatterStyle(point_style(MAIN_COLOR,false));
     plot->addGraph();
     plot->graph(1)->setPen(QPen(LATEST2_COLOR));
     plot->graph(1)->setLineStyle(QCPGraph::lsNone);
@@ -1423,7 +1433,7 @@ void MainWindow::apply_display_impl(QCustomPlot *plot)
     g0->setVisible(!grad || hl);
     QColor c0 = hl ? T.normal_point : MAIN_COLOR;
     g0->setPen(QPen(c0));
-    g0->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,c0,T.plot_bg,5));
+    g0->setScatterStyle(point_style(c0,false));
 
     // 強調する点だけの青緑のグラフ(Highlight かつ Gradient でないとき)
     if(hl && !grad){
@@ -1432,7 +1442,7 @@ void MainWindow::apply_display_impl(QCustomPlot *plot)
             hg = plot->addGraph();
             hg->setPen(QPen(MAIN_COLOR));
             hg->setLineStyle(QCPGraph::lsNone);
-            hg->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,MAIN_COLOR,MAIN_COLOR,5));    // 閾値以上の点は塗りつぶし
+            hg->setScatterStyle(point_style(MAIN_COLOR,true));    // 閾値以上の点は塗りつぶし
         }
         QVector<double> hx,hy;
         for(int i=0;i<s.x.size();i++){
@@ -1465,7 +1475,7 @@ void MainWindow::apply_display_impl(QCustomPlot *plot)
             QCPGraph *g = plot->addGraph();
             g->setPen(QPen(col));
             g->setLineStyle(QCPGraph::lsNone);
-            g->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle, col, hl ? col : T.plot_bg, 5));
+            g->setScatterStyle(point_style(col,hl));
         }
     }
     for(int b=0;b<GRADIENT_BINS && FIRST + b < plot->graphCount();b++){
@@ -1475,7 +1485,7 @@ void MainWindow::apply_display_impl(QCustomPlot *plot)
         // Highlight 中は、色が付く(閾値以上の)点だけなので塗りつぶし。そうでなければ輪
         for(int b=0;b<GRADIENT_BINS && FIRST + b < plot->graphCount();b++){
             QColor col = bin_color(b);
-            plot->graph(FIRST + b)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,col,hl ? col : T.plot_bg,5));
+            plot->graph(FIRST + b)->setScatterStyle(point_style(col,hl));
         }
     }
 
