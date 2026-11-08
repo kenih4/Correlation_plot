@@ -24,6 +24,7 @@
 #include <QHeaderView>
 #include <QVBoxLayout>
 #include <QLabel>
+#include <QCheckBox>
 #include <QMessageBox>
 
 // 自動更新ごとに書き出すCSV
@@ -439,6 +440,9 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event)
     if(obj==ui->widget && event->type()==QEvent::Leave){
         highlight_shot(-1);
     }
+    if(trend_win && obj==ui->widget && event->type()==QEvent::Resize){
+        fit_trend_panel_width();        // 子パネルのトレンドグラフの幅を、メインのトレンドグラフに合わせる
+    }
     if(extra_scroll && obj==extra_scroll->viewport() && event->type()==QEvent::Resize){
         fit_extra_row_height();
     }
@@ -482,6 +486,7 @@ void MainWindow::mousePress()
 
 void MainWindow::on_pushButton_clicked()
 {
+    trend_rebase = true;        // 子パネルの基準値(ゼロ)は、この Get で取れた最初の値にする
     delete corrdata;
     corrdata = new Corr_data(ui->spinBox->value(),ui->checkBox_calc->checkState());
     corrdata->set_stats(stats_act->isChecked());
@@ -591,6 +596,7 @@ void MainWindow::plot_init(QCustomPlot *plot)
 }
 void MainWindow::plot_trend(QCustomPlot *plot)
 {
+    if(plot==ui->widget)update_trend_panel();       // 子パネルの信号ごとのトレンドも更新
     QVector<double> x(corrdata->data_size()),y(corrdata->data_size());
     QFont legendFont = font();
     legendFont.setPointSize(9);
@@ -1025,8 +1031,165 @@ void MainWindow::switch_theme(const QString &name)
     for(QListWidget *l : {ui->listWidget,ui->listWidget_2})
         for(int i=0;i<l->count();i++)apply_item_style(l->item(i));
     style_add_badge();
+    for(auto it=trend_rows.begin();it!=trend_rows.end();++it){
+        style_plot(it->plot);
+        it->plot->replot();
+    }
     for(QCustomPlot *p : plots)p->replot();
     statusBar()->showMessage(tr("Theme: %1").arg(g_theme_name),3000);
+}
+
+// ===== 子パネル(Trend Panel) =====
+// Plot Signal の全信号のトレンドグラフ(時刻 vs 値)を縦に並べる。
+//  - 各グラフの幅は、メインのトレンドグラフと同じ。横軸(時刻)の範囲も連動する
+//  - 信号ごとのチェックボックス(既定は全部オン)で、表示する/しないを選ぶ
+//  - 値は、直近の Get で取れた最初の値を 0 とした差(信号ごとにベースが違うため)
+void MainWindow::open_trend_panel()
+{
+    if(!trend_win){
+        trend_win = new QWidget(this,Qt::Window);
+        trend_win->setWindowTitle("Trend Panel");
+        QVBoxLayout *top = new QVBoxLayout(trend_win);
+        top->setContentsMargins(6,6,6,6);
+        QHBoxLayout *bar = new QHBoxLayout;
+        QPushButton *all_on = new QPushButton("All ON",trend_win);
+        QPushButton *all_off = new QPushButton("All OFF",trend_win);
+        bar->addWidget(all_on);
+        bar->addWidget(all_off);
+        bar->addStretch();
+        top->addLayout(bar);
+        trend_scroll = new QScrollArea(trend_win);
+        trend_scroll->setWidgetResizable(true);
+        trend_scroll->setFrameShape(QFrame::NoFrame);
+        QWidget *inner = new QWidget;
+        trend_lay = new QVBoxLayout(inner);
+        trend_lay->setContentsMargins(0,0,0,0);
+        trend_lay->setSpacing(4);
+        trend_lay->addStretch();
+        trend_scroll->setWidget(inner);
+        top->addWidget(trend_scroll);
+        auto set_all = [this](bool on){
+            for(auto it=trend_rows.begin();it!=trend_rows.end();++it)it->cb->setChecked(on);
+        };
+        connect(all_on,&QPushButton::clicked,this,[set_all](){set_all(true);});
+        connect(all_off,&QPushButton::clicked,this,[set_all](){set_all(false);});
+        // メインのトレンドグラフの横軸が動いたら、子パネルも合わせる(子のグラフ側の操作は update_trend_panel で連動させる)
+        connect(ui->widget->xAxis,QOverload<const QCPRange&>::of(&QCPAxis::rangeChanged),this,[this](const QCPRange &r){
+            if(trend_syncing)return;
+            trend_syncing = true;
+            for(auto it=trend_rows.begin();it!=trend_rows.end();++it){
+                it->plot->xAxis->setRange(r);
+                it->plot->replot(QCustomPlot::rpQueuedReplot);
+            }
+            trend_syncing = false;
+        });
+    }
+    update_trend_panel();
+    fit_trend_panel_width();
+    int w = ui->widget->width() + 12 + trend_scroll->verticalScrollBar()->sizeHint().width() + 6;
+    trend_win->resize(w,std::max(500,height()*3/4));
+    trend_win->show();
+    trend_win->raise();
+    trend_win->activateWindow();
+}
+
+// 各トレンドグラフの幅を、メインのトレンドグラフの幅にそろえる
+void MainWindow::fit_trend_panel_width()
+{
+    int w = ui->widget->width();
+    for(auto it=trend_rows.begin();it!=trend_rows.end();++it)it->plot->setFixedWidth(w);
+}
+
+void MainWindow::update_trend_panel()
+{
+    if(!corrdata)return;
+    const int n = corrdata->data_size(),ns = corrdata->sig_size();
+    // 基準値(ゼロ)は、Get した時点の最初のショットの値。パネルが閉じていても記録する
+    if(trend_rebase && n>0){
+        trend_base.clear();
+        for(int i=0;i<ns;i++){
+            QString name = QString::fromStdString(corrdata->sig_name(i));
+            trend_base[name] = corrdata->value(corrdata->sig_name(i),0);
+        }
+        trend_rebase = false;
+    }
+    if(!trend_win || !trend_win->isVisible())return;
+    if(n<1 || ns<1)return;
+
+    QStringList names;
+    for(int i=0;i<ns;i++)names << QString::fromStdString(corrdata->sig_name(i));
+    if(names!=trend_order){         // 信号の構成が変わったので、行を作り直す(チェックの状態は信号名で覚えている)
+        for(auto it=trend_rows.begin();it!=trend_rows.end();++it){
+            trend_lay->removeWidget(it->box);
+            it->box->deleteLater();
+        }
+        trend_rows.clear();
+        trend_order = names;
+        for(int i=0;i<names.size();i++){
+            const QString &name = names[i];
+            TrendRow row;
+            row.box = new QWidget;
+            QVBoxLayout *l = new QVBoxLayout(row.box);
+            l->setContentsMargins(0,0,0,0);
+            l->setSpacing(0);
+            row.cb = new QCheckBox(name,row.box);
+            row.cb->setChecked(trend_on.value(name,true));
+            row.plot = new QCustomPlot(row.box);
+            row.plot->setFixedHeight(150);
+            row.plot->setFixedWidth(ui->widget->width());
+            style_plot(row.plot);
+            row.plot->addGraph();
+            QColor col = QColor::fromHsv((i*47)%360,170,235);
+            if(!T.dark)col = QColor::fromHsv((i*47)%360,220,170);
+            row.plot->graph(0)->setPen(QPen(col,1.5));
+            QSharedPointer<QCPAxisTickerDateTime> dateTicker(new QCPAxisTickerDateTime);
+            dateTicker->setDateTimeFormat("HH:mm:ss");
+            row.plot->xAxis->setTicker(dateTicker);
+            row.plot->yAxis->setLabel(QString::fromUtf8("Δ from first"));
+            row.plot->setInteractions(QCP::iRangeDrag|QCP::iRangeZoom);
+            row.plot->axisRect()->setRangeDrag(Qt::Horizontal);
+            row.plot->axisRect()->setRangeZoom(Qt::Horizontal);
+            row.plot->setVisible(row.cb->isChecked());
+            l->addWidget(row.cb);
+            l->addWidget(row.plot);
+            trend_lay->insertWidget(trend_lay->count()-1,row.box);
+            QCustomPlot *pl = row.plot;
+            connect(row.cb,&QCheckBox::toggled,this,[this,name,pl](bool on){
+                trend_on[name] = on;
+                pl->setVisible(on);
+            });
+            connect(row.plot->xAxis,QOverload<const QCPRange&>::of(&QCPAxis::rangeChanged),this,[this,pl](const QCPRange &r){
+                if(trend_syncing)return;        // 子のグラフを動かしたら、メインと他の子も連動
+                trend_syncing = true;
+                ui->widget->xAxis->setRange(r);
+                ui->widget->replot(QCustomPlot::rpQueuedReplot);
+                for(auto it=trend_rows.begin();it!=trend_rows.end();++it){
+                    if(it->plot==pl)continue;
+                    it->plot->xAxis->setRange(r);
+                    it->plot->replot(QCustomPlot::rpQueuedReplot);
+                }
+                trend_syncing = false;
+            });
+            trend_rows[name] = row;
+        }
+    }
+    QVector<double> x(n);
+    for(int i=0;i<n;i++)
+        x[i] = QDateTime::fromString(QString::fromStdString(corrdata->endtime(i)),"yyyy/MM/dd HH:mm:ss.z").toSecsSinceEpoch();
+    trend_syncing = true;       // 横軸は、メインのトレンドグラフと同じ範囲にする(連動のループを防ぐ)
+    for(int k=0;k<names.size();k++){
+        const QString &name = names[k];
+        TrendRow &row = trend_rows[name];
+        if(!trend_base.contains(name))trend_base[name] = corrdata->value(corrdata->sig_name(k),0);
+        const double b = trend_base[name];
+        QVector<double> y(n);
+        for(int i=0;i<n;i++)y[i] = corrdata->value(corrdata->sig_name(k),i) - b;
+        row.plot->graph(0)->setData(x,y);
+        row.plot->graph(0)->rescaleValueAxis();
+        row.plot->xAxis->setRange(ui->widget->xAxis->range());
+        row.plot->replot(QCustomPlot::rpQueuedReplot);
+    }
+    trend_syncing = false;
 }
 
 // ステータスバーの「ADD」の目印の色(テーマに合わせる)
@@ -2452,6 +2615,11 @@ void MainWindow::createActions()
     tagOffsetAct->setStatusTip(tr("Specify offsets added to sacla_tag and sr_tag when matching signal data (default 0)"));
     connect(tagOffsetAct, &QAction::triggered, this, &MainWindow::show_tag_offset);
     fileMenu->addAction(tagOffsetAct);
+
+    QAction *trendPanelAct = new QAction(tr("Trend &Panel..."), this);
+    trendPanelAct->setStatusTip(tr("Open a child panel with the trend graph of every signal in Plot Signal (starting from 0 at the first value of the last Get)"));
+    connect(trendPanelAct, &QAction::triggered, this, &MainWindow::open_trend_panel);
+    fileMenu->addAction(trendPanelAct);
 
     QAction *openCfgAct = new QAction(tr("Open &Config Files (pluma)"), this);
     openCfgAct->setStatusTip(tr("Open all text files in the config directory with pluma"));

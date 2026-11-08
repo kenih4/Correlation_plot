@@ -9,6 +9,8 @@
 #include <QRegularExpression>
 #include <QDateTime>
 #include <QActionGroup>
+#include <QVBoxLayout>
+#include <QCheckBox>
 #include "corr_data.h"
 #include "qcustomplot.h"
 
@@ -67,12 +69,26 @@ private slots:
     void restyle_plot(QCustomPlot *plot); // 切り替え時に、作成済みのグラフの色を新しいテーマにする
     void switch_theme(const QString &name);   // Theme メニュー: 実行中にテーマを切り替える
     void style_add_badge();
+    void open_trend_panel();        // File メニュー: 子パネル(Plot Signal の全信号のトレンドグラフ)
+    void update_trend_panel();
+    void fit_trend_panel_width();
     void open_config_files();   // File メニュー: 設定ディレクトリのテキストファイルを pluma で全部開く
     void open_baratsuki_hikaku();   // File メニュー: 別の GUI(settings.ini の [Tools] baratsuki_hikaku のフルパス)を開く
     void list_context_menu(const QPoint &pos);   // Plot Signal リストの右クリックメニュー(Show mean label)
     void rank_mode_changed();       // File メニューの Rank by ... (MIC / Importance / Gap of Means)
 
 private:
+    // 子パネル(Trend Panel)
+    QWidget *trend_win = nullptr;
+    QVBoxLayout *trend_lay = nullptr;
+    QScrollArea *trend_scroll = nullptr;
+    struct TrendRow{QWidget *box = nullptr;QCheckBox *cb = nullptr;QCustomPlot *plot = nullptr;};
+    QMap<QString,TrendRow> trend_rows;      // 信号名 → 行
+    QStringList trend_order;                // 現在の行の信号名(順)
+    QMap<QString,bool> trend_on;            // 信号ごとの表示チェック(既定オン)
+    QMap<QString,double> trend_base;        // 信号ごとの基準値(Get で取れた最初の値)
+    bool trend_rebase = false;              // 次の更新で基準値を取り直す(Get 直後)
+    bool trend_syncing = false;
     void set_scatter_data(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y,const QVector<double> &yref,const QVector<int> &shot);
     void highlight_shot(int shot);
     void apply_display(QCustomPlot *plot);
