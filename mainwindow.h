@@ -3,6 +3,7 @@
 
 #include <QMainWindow>
 #include <QTreeWidget>
+#include <QLabel>
 #include <QScrollArea>
 #include <QGridLayout>
 #include <QRegularExpression>
@@ -60,6 +61,9 @@ private slots:
     void show_tag_offset();     // File メニューの Tag Offset...(sacla_tag, sr_tag のオフセット)
     void check_config_files();  // 起動時に設定ファイルの有無を確認して警告する
     void load_colors();         // 起動時に settings.ini の [Colors] から色を読む(再起動で切り替わる)
+    void load_theme();          // 起動時に settings.ini の [Theme] name(dark / classic)を読んで、配色を決める
+    void apply_theme_widgets(); // ダークテーマのとき、アプリ全体のパレットとスタイルシートを設定する
+    void style_plot(QCustomPlot *plot);   // グラフの背景・軸・格子の色をテーマにそろえる
     void open_config_files();   // File メニュー: 設定ディレクトリのテキストファイルを pluma で全部開く
     void open_baratsuki_hikaku();   // File メニュー: 別の GUI(settings.ini の [Tools] baratsuki_hikaku のフルパス)を開く
     void list_context_menu(const QPoint &pos);   // Plot Signal リストの右クリックメニュー(Show mean label)
@@ -131,6 +135,7 @@ private:
     QString calc_signature();
     void mark_calculated();
     bool has_calculated = false;
+    QLabel *add_badge = nullptr;    // Add がオンのとき、ステータスバーに出す「ADD」の目印
     bool get_busy = false;      // Get の最中(進捗表示のためイベントを処理するので、その間は自動更新を止める)
     unsigned last_version = 0;
     QString last_signature;

@@ -31,19 +31,61 @@ static const char *CSV_FILE = "/home_2023/xfel/xfelopr/users/kenichi/dvlp/corr_d
 #include <cmath>
 #include <algorithm>
 
-// 散布図・トレンドグラフで「強調する点・線・文字」に使う色(既定は暗い青緑。白い背景でのコントラスト比 6.5)。
-// settings.ini の [Colors] で変えられる(load_colors。再起動で反映)
-static QColor MAIN_COLOR(0,105,107);
-// 最新の点の色。LATEST1=最新(サイズ15)、LATEST2=2番目(13)、LATEST3=3番目(11)。4番目以降は通常の点と同じ
-static QColor LATEST1_COLOR("#ff0000");     // 赤
-static QColor LATEST2_COLOR("#b3424a");     // えんじ色
-static QColor LATEST3_COLOR("#8000ff");     // 紫
+// ===== テーマ(配色) =====
+// settings.ini の [Theme] name で選ぶ(再起動で反映):
+//   dark    : 暗い背景に合わせた配色(既定)
+//   classic : 以前の、白い背景のグラフ
+// さらに [Colors](load_colors)で、強調の色と最新の点の色を、個別に上書きできる。
+struct Theme{
+    bool dark = true;
+    // GUI
+    QColor window,panel,border,text,muted,accent;
+    // グラフ
+    QColor plot_bg,grid,axis_line;
+    QColor normal_point;    // 通常の(強調されていない)点
+    QColor band,label_bg,label_border,curve_line,grad_end;
+};
+static Theme T;
+
+// 強調する点・線・文字に使う色。最新の点の色: LATEST1=最新(サイズ15)、LATEST2=2番目(13)、LATEST3=3番目(11)。
+// 4番目以降は通常の点と同じ。いずれも、テーマの既定で初期化し、[Colors] で上書きする
+static QColor MAIN_COLOR;
+static QColor LATEST1_COLOR,LATEST2_COLOR,LATEST3_COLOR;
 // 十字印が「優秀なショットの平均に近い」(閾値以上の)ときの色。settings.ini の cross_near で指定。
 // 指定が無ければ、強調の色(MAIN_COLOR)と同じ
 static QColor CROSS_NEAR_COLOR;
 static QColor cross_near_color(){return CROSS_NEAR_COLOR.isValid() ? CROSS_NEAR_COLOR : MAIN_COLOR;}
-// 十字印が「近くない」ときの色(既定は黒)。settings.ini の cross で指定
-static QColor CROSS_COLOR(Qt::black);
+// 十字印が「近くない」ときの色。settings.ini の cross で指定
+static QColor CROSS_COLOR;
+
+static void set_theme(const QString &name)
+{
+    T = Theme();
+    CROSS_NEAR_COLOR = QColor();
+    if(name=="classic"){
+        T.dark = false;
+        T.window = QColor(240,240,240);  T.panel = Qt::white;  T.border = QColor(200,200,200);
+        T.text = Qt::black;  T.muted = QColor(60,60,60);  T.accent = QColor(0,105,107);
+        T.plot_bg = Qt::white;  T.grid = QColor(200,200,200);  T.axis_line = Qt::black;
+        T.normal_point = QColor(170,170,170);
+        T.band = QColor(190,190,190,90);  T.label_bg = QColor(255,255,255,230);  T.label_border = Qt::white;
+        T.curve_line = QColor(90,90,90);  T.grad_end = Qt::blue;
+        MAIN_COLOR = QColor(0,105,107);
+        LATEST1_COLOR = QColor("#ff0000");  LATEST2_COLOR = QColor("#b3424a");  LATEST3_COLOR = QColor("#8000ff");
+        CROSS_COLOR = Qt::black;
+    }else{      // dark
+        T.dark = true;
+        T.window = QColor("#0F1216");  T.panel = QColor("#171B22");  T.border = QColor("#262C36");
+        T.text = QColor("#E6EAF0");  T.muted = QColor("#8A94A6");  T.accent = QColor("#2EC4B6");
+        T.plot_bg = QColor("#171B22");  T.grid = QColor("#232A33");  T.axis_line = QColor("#3A4350");
+        T.normal_point = QColor("#6B7686");
+        T.band = QColor(160,170,190,45);  T.label_bg = QColor(15,18,22,200);  T.label_border = QColor("#262C36");
+        T.curve_line = QColor("#8A94A6");  T.grad_end = QColor("#4D9BFF");
+        MAIN_COLOR = QColor("#2EC4B6");
+        LATEST1_COLOR = QColor("#FF5A5F");  LATEST2_COLOR = QColor("#E8646E");  LATEST3_COLOR = QColor("#B794FF");
+        CROSS_COLOR = QColor("#E6EAF0");
+    }
+}
 
 // 設定ファイルのディレクトリ。実行時の引数で指定されたときはそれ、なければ ~/.config/Correlation_plot
 static QString g_config_dir;
@@ -52,6 +94,8 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
 {
+    load_theme();               // 配色(dark / classic)を決める。ウィジェットを作る前に
+    apply_theme_widgets();
     ui->setupUi(this);
     cerr << "Config directory : " << QFileInfo(signal_list_file("signals.txt")).absolutePath().toStdString()
          << (g_config_dir.isEmpty() ? "  (default)" : "  (specified by argument)") << endl;
@@ -184,6 +228,7 @@ MainWindow::MainWindow(QWidget *parent)
     tracerText->setPositionAlignment(Qt::AlignLeft);
     tracerText->position->setCoords(QPointF(0,0));
     tracerText->setText("(-)");
+    tracerText->setColor(T.text);
     tracer->setVisible(false);
     tracerText->setVisible(false);
 
@@ -480,10 +525,11 @@ void MainWindow::on_pushButton_clicked()
 }
 void MainWindow::plot_init(QCustomPlot *plot)
 {
+    style_plot(plot);
     plot->addGraph();
     plot->graph(0)->setPen(QPen(MAIN_COLOR));
     plot->graph(0)->setLineStyle(QCPGraph::lsNone);
-    plot->graph(0)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle, MAIN_COLOR, Qt::white, 5));
+    plot->graph(0)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle, MAIN_COLOR, T.plot_bg, 5));
     plot->addGraph();
     plot->graph(1)->setPen(QPen(LATEST2_COLOR));
     plot->graph(1)->setLineStyle(QCPGraph::lsNone);
@@ -561,12 +607,12 @@ QString MainWindow::update_binned_curve(QCustomPlot *plot,const QVector<double> 
     }
     if(!b.graph){
         b.graph = plot->addGraph();
-        b.graph->setPen(QPen(Qt::black,2));
+        b.graph->setPen(QPen(T.text,2));
         b.graph->setLineStyle(QCPGraph::lsLine);
-        b.graph->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssDisc,Qt::black,6));
+        b.graph->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssDisc,T.text,6));
         b.err = new QCPErrorBars(plot->xAxis,plot->yAxis);
         b.err->setDataPlottable(b.graph);
-        b.err->setPen(QPen(Qt::black,1.5));
+        b.err->setPen(QPen(T.text,1.5));
     }
 
     // MIC の計算と同じ条件(Threshold オンなら基準信号が閾値を超えたショットだけ)
@@ -617,8 +663,8 @@ void MainWindow::set_info_text(QCustomPlot *plot,int n,const QString &best,const
         b.text->setPositionAlignment(Qt::AlignTop|Qt::AlignHCenter);
         b.text->position->setType(QCPItemPosition::ptAxisRectRatio);
         b.text->position->setCoords(0.75, 0);
-        b.text->setPen(QPen(Qt::white));
-        b.text->setBrush(QBrush(QColor(255,255,255,230)));
+        b.text->setPen(QPen(T.label_border));
+        b.text->setBrush(QBrush(T.label_bg));
     }
     double mic = corrdata->mic(n);
     b.text->setVisible(true);
@@ -633,7 +679,7 @@ void MainWindow::set_info_text(QCustomPlot *plot,int n,const QString &best,const
     }
     if(!stats_act->isChecked()){
         b.text->setText(QString("mic : %1").arg(mic,0,'f',3) + impLine);
-        b.text->setColor(Qt::black);
+        b.text->setColor(T.text);
         return;
     }
     double nul = corrdata->mic_null(n);
@@ -645,7 +691,7 @@ void MainWindow::set_info_text(QCustomPlot *plot,int n,const QString &best,const
     b.text->setText(s);
     // 偶然の範囲を超えていれば青緑字
     bool significant = mic>nul && corrdata->pval(n)<0.05;
-    b.text->setColor(significant ? MAIN_COLOR : QColor(60,60,60));
+    b.text->setColor(significant ? MAIN_COLOR : T.muted);
 }
 
 // 最新の3点を色分けして重ねる(色は settings.ini の [Colors] latest1〜latest3):
@@ -695,13 +741,14 @@ static QString ini_string(QSettings &st,const QString &key,const QString &def)
 }
 
 // 起動時に settings.ini の [Colors] から、強調の色と最新の点の色を読む(再起動で切り替わる)。
+// 既定の色は、[Theme] name で選んだテーマ(dark / classic)による。ここで書いた色は、テーマの色より優先する。
 //   [Colors]
-//   highlight=#00696B     ; 閾値以上の点・縦線・数値・十字印などの色
-//   latest1=#ff0000       ; 最新の点(サイズ15)
-//   latest2=#b3424a       ; 2番目の点(サイズ13)
-//   latest3=#8000ff       ; 3番目の点(サイズ11)
-//   cross_near=#00696B    ; 十字印が優秀なショットの平均に近いとき(閾値以上のとき)の色。無ければ highlight と同じ
-//   cross=#000000         ; 十字印が近くないときの色(既定は黒)
+//   highlight=#2EC4B6     ; 閾値以上の点・縦線・数値・十字印などの色(dark の既定。classic は #00696B)
+//   latest1=#FF5A5F       ; 最新の点(サイズ15)       (dark の既定。classic は #ff0000)
+//   latest2=#E8646E       ; 2番目の点(サイズ13)      (dark の既定。classic は #b3424a)
+//   latest3=#B794FF       ; 3番目の点(サイズ11)      (dark の既定。classic は #8000ff)
+//   cross_near=#2EC4B6    ; 十字印が優秀なショットの平均に近いとき(閾値以上のとき)の色。無ければ highlight と同じ
+//   cross=#E6EAF0         ; 十字印が近くないときの色(dark の既定。classic は黒)
 // 色は「#RRGGBB」または色名(teal, red など)。無い/不正なキーは既定の色のまま。
 void MainWindow::load_colors()
 {
@@ -721,6 +768,101 @@ void MainWindow::load_colors()
     get("Colors/latest3",LATEST3_COLOR);
     get("Colors/cross_near",CROSS_NEAR_COLOR);
     get("Colors/cross",CROSS_COLOR);
+}
+
+// 起動時に settings.ini の [Theme] name を読んで、配色を決める(既定 dark)。QSettings が読めるように、先に設定ディレクトリを決めておく
+void MainWindow::load_theme()
+{
+    QString name = "dark";
+    QFileInfo fi(signal_list_file("settings.ini"));
+    if(fi.exists()){
+        QSettings st(fi.absoluteFilePath(),QSettings::IniFormat);
+        name = ini_string(st,"Theme/name","dark").toLower();
+        if(name!="dark" && name!="classic"){
+            cerr << "WARNING: settings.ini Theme/name must be dark or classic; using dark" << endl;
+            name = "dark";
+        }
+    }
+    set_theme(name);
+    cerr << "Theme : " << name.toStdString() << endl;
+}
+
+// ダークテーマ: Fusion スタイル + 暗いパレット + スタイルシート(ボタン、入力欄、リスト、メニュー、スクロールバー、進捗バーなど)。
+// スピンボックスやチェックボックスは、スタイルシートで枠を指定すると矢印や印が消えることがあるので、パレットだけで色を付ける
+void MainWindow::apply_theme_widgets()
+{
+    if(!T.dark)return;
+    QApplication::setStyle("Fusion");
+    QPalette p;
+    p.setColor(QPalette::Window,T.window);
+    p.setColor(QPalette::WindowText,T.text);
+    p.setColor(QPalette::Base,QColor("#0F1216"));
+    p.setColor(QPalette::AlternateBase,T.panel);
+    p.setColor(QPalette::Text,T.text);
+    p.setColor(QPalette::Button,QColor("#232A35"));
+    p.setColor(QPalette::ButtonText,T.text);
+    p.setColor(QPalette::ToolTipBase,T.panel);
+    p.setColor(QPalette::ToolTipText,T.text);
+    p.setColor(QPalette::PlaceholderText,T.muted);
+    p.setColor(QPalette::Highlight,T.accent);
+    p.setColor(QPalette::HighlightedText,T.window);
+    p.setColor(QPalette::Link,T.accent);
+    p.setColor(QPalette::Light,QColor("#2F3744"));
+    p.setColor(QPalette::Dark,QColor("#0A0D10"));
+    p.setColor(QPalette::Mid,QColor("#1B222B"));
+    p.setColor(QPalette::Disabled,QPalette::WindowText,QColor("#5B6572"));
+    p.setColor(QPalette::Disabled,QPalette::Text,QColor("#5B6572"));
+    p.setColor(QPalette::Disabled,QPalette::ButtonText,QColor("#5B6572"));
+    QApplication::setPalette(p);
+
+    qApp->setStyleSheet(QString(
+        "QToolTip{background:%1;color:%2;border:1px solid %3;}"
+        "QPushButton{background:#232A35;border:1px solid #2F3744;border-radius:6px;padding:2px 10px;}"
+        "QPushButton:hover{background:#2C3542;border-color:%4;}"
+        "QPushButton:pressed{background:#1B222B;}"
+        "QPushButton:disabled{color:#5B6572;}"
+        "QLineEdit{background:#0F1216;border:1px solid #2F3744;border-radius:4px;padding:1px 4px;"
+        "selection-background-color:%4;selection-color:%5;}"
+        "QLineEdit:focus{border-color:%4;}"
+        "QListWidget,QTreeWidget,QTableWidget{background:#0F1216;border:1px solid %3;border-radius:4px;}"
+        "QListWidget::item:selected,QTreeWidget::item:selected,QTableWidget::item:selected{background:#1F3B3A;color:%2;}"
+        "QHeaderView::section{background:%1;color:%6;border:0;border-bottom:1px solid %3;padding:3px 6px;}"
+        "QMenuBar{background:%5;}"
+        "QMenuBar::item:selected{background:#232A35;}"
+        "QMenu{background:%1;border:1px solid %3;}"
+        "QMenu::item{padding:4px 22px;}"
+        "QMenu::item:selected{background:%4;color:%5;}"
+        "QMenu::separator{height:1px;background:%3;margin:4px 8px;}"
+        "QScrollBar:vertical{background:%5;width:10px;margin:0;}"
+        "QScrollBar::handle:vertical{background:#2F3744;border-radius:5px;min-height:24px;}"
+        "QScrollBar::handle:vertical:hover{background:#3A4350;}"
+        "QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical{height:0;}"
+        "QScrollBar:horizontal{background:%5;height:10px;margin:0;}"
+        "QScrollBar::handle:horizontal{background:#2F3744;border-radius:5px;min-width:24px;}"
+        "QScrollBar::handle:horizontal:hover{background:#3A4350;}"
+        "QScrollBar::add-line:horizontal,QScrollBar::sub-line:horizontal{width:0;}"
+        "QProgressBar{border:1px solid #2F3744;border-radius:4px;text-align:center;background:#0F1216;}"
+        "QProgressBar::chunk{background:%4;border-radius:3px;}"
+        "QStatusBar{background:%5;color:%6;}"
+    ).arg(T.panel.name(),T.text.name(),T.border.name(),T.accent.name(),T.window.name(),T.muted.name()));
+}
+
+// グラフの背景・軸・格子をテーマにそろえる(ダークテーマのときだけ。classic は QCustomPlot の既定のまま)
+void MainWindow::style_plot(QCustomPlot *plot)
+{
+    if(!T.dark)return;
+    plot->setBackground(QBrush(T.plot_bg));
+    plot->axisRect()->setBackground(QBrush(T.plot_bg));
+    for(QCPAxis *ax : {plot->xAxis,plot->yAxis}){
+        ax->setBasePen(QPen(T.axis_line,1));
+        ax->setTickPen(QPen(T.axis_line,1));
+        ax->setSubTickPen(QPen(T.axis_line,1));
+        ax->setTickLabelColor(T.muted);
+        ax->setLabelColor(T.text);
+        ax->grid()->setPen(QPen(T.grid,1));
+        ax->grid()->setSubGridVisible(false);
+        ax->grid()->setZeroLinePen(QPen(T.grid,1));
+    }
 }
 
 // Highlight の閾値を、基準信号の値 v から決める。
@@ -929,7 +1071,7 @@ void MainWindow::update_recent_line(QCustomPlot *plot,const QVector<double> &x,c
     }
     if(!r.line){
         r.line = new QCPCurve(plot->xAxis,plot->yAxis);
-        r.line->setPen(QPen(QColor(90,90,90),1.5));
+        r.line->setPen(QPen(T.curve_line,1.5));
         r.line->setLayer("grid");   // 点(main)の下に描く
     }
     int n = x.size();
@@ -1197,7 +1339,7 @@ void MainWindow::update_mean_lines(QCustomPlot *plot)
     if(!m.band){
         m.band = new QCPItemRect(plot);
         m.band->setPen(Qt::NoPen);
-        m.band->setBrush(QBrush(QColor(190,190,190,90)));
+        m.band->setBrush(QBrush(T.band));
         m.band->setLayer("grid");           // 点(main)の下に描く
         m.band->topLeft->setTypeX(QCPItemPosition::ptPlotCoords);
         m.band->topLeft->setTypeY(QCPItemPosition::ptAxisRectRatio);
@@ -1220,7 +1362,7 @@ void MainWindow::update_mean_lines(QCustomPlot *plot)
         m.hi_text->position->setCoords(0.02,0.98);
         m.hi_text->setColor(MAIN_COLOR);
         m.hi_text->setPen(Qt::NoPen);
-        m.hi_text->setBrush(QBrush(QColor(255,255,255,200)));
+        m.hi_text->setBrush(QBrush(T.label_bg));
         QFont f = font();
         f.setPointSize(9);
         m.hi_text->setFont(f);
@@ -1279,9 +1421,9 @@ void MainWindow::apply_display_impl(QCustomPlot *plot)
     QCPGraph *g0 = plot->graph(0);
     if(!grad || hl || plot==ui->widget)g0->setData(s.x,s.y);
     g0->setVisible(!grad || hl);
-    QColor c0 = hl ? QColor(170,170,170) : MAIN_COLOR;
+    QColor c0 = hl ? T.normal_point : MAIN_COLOR;
     g0->setPen(QPen(c0));
-    g0->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,c0,Qt::white,5));
+    g0->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,c0,T.plot_bg,5));
 
     // 強調する点だけの青緑のグラフ(Highlight かつ Gradient でないとき)
     if(hl && !grad){
@@ -1313,7 +1455,9 @@ void MainWindow::apply_display_impl(QCustomPlot *plot)
     // 位置 b のグラデーションの色: 暗い青緑(古い側)→ 青(新しい側)
     auto bin_color = [GRADIENT_BINS](int b){
         double t = b / (double)(GRADIENT_BINS - 1);
-        return QColor(0, qRound(MAIN_COLOR.green() * (1 - t)), qRound(MAIN_COLOR.blue() * (1 - t) + 255 * t));
+        return QColor(qRound(MAIN_COLOR.red() * (1 - t) + T.grad_end.red() * t),
+                      qRound(MAIN_COLOR.green() * (1 - t) + T.grad_end.green() * t),
+                      qRound(MAIN_COLOR.blue() * (1 - t) + T.grad_end.blue() * t));
     };
     if(grad){
         while(plot->graphCount() < FIRST + GRADIENT_BINS){
@@ -1321,7 +1465,7 @@ void MainWindow::apply_display_impl(QCustomPlot *plot)
             QCPGraph *g = plot->addGraph();
             g->setPen(QPen(col));
             g->setLineStyle(QCPGraph::lsNone);
-            g->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle, col, hl ? col : QColor(Qt::white), 5));
+            g->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle, col, hl ? col : T.plot_bg, 5));
         }
     }
     for(int b=0;b<GRADIENT_BINS && FIRST + b < plot->graphCount();b++){
@@ -1331,7 +1475,7 @@ void MainWindow::apply_display_impl(QCustomPlot *plot)
         // Highlight 中は、色が付く(閾値以上の)点だけなので塗りつぶし。そうでなければ輪
         for(int b=0;b<GRADIENT_BINS && FIRST + b < plot->graphCount();b++){
             QColor col = bin_color(b);
-            plot->graph(FIRST + b)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,col,hl ? col : QColor(Qt::white),5));
+            plot->graph(FIRST + b)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,col,hl ? col : T.plot_bg,5));
         }
     }
 
@@ -1652,7 +1796,7 @@ void MainWindow::show_importance()
     lay->addWidget(label);
     if(r2<=0.05){
         QLabel *warn = new QLabel("OOB R2 が小さく、全信号を使っても基準信号を予測できていません。重要度は信用できません。",dlg);
-        warn->setStyleSheet("color: #c00000;");
+        warn->setStyleSheet(T.dark ? "color: #FF6B6B;" : "color: #c00000;");
         warn->setWordWrap(true);
         lay->addWidget(warn);
     }
@@ -1821,35 +1965,10 @@ void MainWindow::on_checkBox_highlight_toggled(bool checked)
     on_V_highlight_editingFinished();
 }
 
-// Add がオンの間は、GUI の背景を黒にする(ショットを捨てずに増やし続けている、という目印)。
-// 文字などが読めるように、文字は白、入力欄やリストの地は黒に近い灰色にする。
-// QPalette は子のウィジェットにも伝わる。グラフ(QCustomPlot)は、自分で背景を描くので、白のまま。
-// オフにすると、パレットの指定をやめて、元の(環境の)色に戻る。
+// Add がオンの間(ショットを捨てずに増やし続けている間)は、ステータスバーに「ADD」の目印を出す。
 void MainWindow::on_checkBox_add_toggled(bool checked)
 {
-    if(!checked){
-        setPalette(QPalette());
-        return;
-    }
-    QPalette p;
-    p.setColor(QPalette::Window,QColor(0,0,0));
-    p.setColor(QPalette::WindowText,QColor(255,255,255));
-    p.setColor(QPalette::Base,QColor(16,16,16));
-    p.setColor(QPalette::AlternateBase,QColor(28,28,28));
-    p.setColor(QPalette::Text,QColor(255,255,255));
-    p.setColor(QPalette::Button,QColor(42,42,42));
-    p.setColor(QPalette::ButtonText,QColor(255,255,255));
-    p.setColor(QPalette::ToolTipBase,QColor(255,255,220));
-    p.setColor(QPalette::ToolTipText,QColor(0,0,0));
-    p.setColor(QPalette::PlaceholderText,QColor(150,150,150));
-    p.setColor(QPalette::Highlight,QColor(42,130,218));
-    p.setColor(QPalette::HighlightedText,QColor(255,255,255));
-    p.setColor(QPalette::Link,QColor(90,170,255));
-    // 無効なもの(グレーアウト)
-    p.setColor(QPalette::Disabled,QPalette::WindowText,QColor(128,128,128));
-    p.setColor(QPalette::Disabled,QPalette::Text,QColor(128,128,128));
-    p.setColor(QPalette::Disabled,QPalette::ButtonText,QColor(128,128,128));
-    setPalette(p);
+    if(add_badge)add_badge->setVisible(checked);
 }
 
 void MainWindow::on_checkBox_gravity_toggled(bool)
@@ -2207,6 +2326,12 @@ void MainWindow::createActions()
 void MainWindow::createStatusBar()
 {
     statusBar()->showMessage(tr("Ready"));
+    add_badge = new QLabel(" ADD ");
+    add_badge->setToolTip(tr("Add is ON: shots are accumulated without discarding the old ones"));
+    add_badge->setStyleSheet(QString("background:%1;color:%2;border-radius:4px;font-weight:bold;padding:1px 6px;")
+                             .arg(T.accent.name(),T.dark ? T.window.name() : QString("#ffffff")));
+    statusBar()->addPermanentWidget(add_badge);
+    add_badge->setVisible(ui->checkBox_add->isChecked());
 }
 bool MainWindow::save()
 {
