@@ -405,6 +405,7 @@ void MainWindow::highlight_shot(int shot)
 {
     if(shot==hover_shot)return;
     hover_shot = shot;
+    update_trend_cursor();
     for(auto it = scatter_xy.begin(); it != scatter_xy.end(); ++it){
         QCustomPlot *plot = it.key();
         if(plot==ui->widget || !plot->isVisible())continue;
@@ -1033,6 +1034,7 @@ void MainWindow::switch_theme(const QString &name)
     style_add_badge();
     for(auto it=trend_rows.begin();it!=trend_rows.end();++it){
         style_plot(it->plot);
+        if(it->cursor)it->cursor->setPen(QPen(T.text,1.5,Qt::DashLine));
         it->plot->replot();
     }
     for(QCustomPlot *p : plots)p->replot();
@@ -1190,6 +1192,37 @@ void MainWindow::update_trend_panel()
         row.plot->replot(QCustomPlot::rpQueuedReplot);
     }
     trend_syncing = false;
+}
+
+// メインのトレンドグラフで指しているショットの時刻に、子パネルの各グラフへ縦線を引く(指していなければ消す)
+void MainWindow::update_trend_cursor()
+{
+    if(!trend_win || trend_rows.isEmpty())return;
+    bool show = false;
+    double t = 0;
+    if(hover_shot>=0 && scatter_xy.contains(ui->widget)){
+        const ScatterData &s = scatter_xy[ui->widget];
+        auto pos = std::lower_bound(s.shot.begin(),s.shot.end(),hover_shot);
+        if(pos!=s.shot.end() && *pos==hover_shot){
+            t = s.x[pos - s.shot.begin()];
+            show = true;
+        }
+    }
+    for(auto it=trend_rows.begin();it!=trend_rows.end();++it){
+        TrendRow &row = it.value();
+        if(!row.plot->isVisible())continue;
+        if(!row.cursor){
+            if(!show)continue;
+            row.cursor = new QCPItemStraightLine(row.plot);
+            row.cursor->setPen(QPen(T.text,1.5,Qt::DashLine));
+        }
+        if(show){
+            row.cursor->point1->setCoords(t,0);
+            row.cursor->point2->setCoords(t,1);
+        }
+        row.cursor->setVisible(show);
+        row.plot->replot(QCustomPlot::rpQueuedReplot);
+    }
 }
 
 // ステータスバーの「ADD」の目印の色(テーマに合わせる)

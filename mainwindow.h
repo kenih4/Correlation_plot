@@ -72,6 +72,7 @@ private slots:
     void open_trend_panel();        // File メニュー: 子パネル(Plot Signal の全信号のトレンドグラフ)
     void update_trend_panel();
     void fit_trend_panel_width();
+    void update_trend_cursor();     // メインのトレンドで指したショットの時刻に、子パネルへ縦線
     void open_config_files();   // File メニュー: 設定ディレクトリのテキストファイルを pluma で全部開く
     void open_baratsuki_hikaku();   // File メニュー: 別の GUI(settings.ini の [Tools] baratsuki_hikaku のフルパス)を開く
     void list_context_menu(const QPoint &pos);   // Plot Signal リストの右クリックメニュー(Show mean label)
@@ -82,7 +83,7 @@ private:
     QWidget *trend_win = nullptr;
     QVBoxLayout *trend_lay = nullptr;
     QScrollArea *trend_scroll = nullptr;
-    struct TrendRow{QWidget *box = nullptr;QCheckBox *cb = nullptr;QCustomPlot *plot = nullptr;};
+    struct TrendRow{QWidget *box = nullptr;QCheckBox *cb = nullptr;QCustomPlot *plot = nullptr;QCPItemStraightLine *cursor = nullptr;};
     QMap<QString,TrendRow> trend_rows;      // 信号名 → 行
     QStringList trend_order;                // 現在の行の信号名(順)
     QMap<QString,bool> trend_on;            // 信号ごとの表示チェック(既定オン)
