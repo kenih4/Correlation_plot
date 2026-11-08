@@ -54,6 +54,7 @@ private slots:
     void on_checkBox_highlight_toggled(bool checked);
     void on_V_highlight_editingFinished();
     void on_checkBox_gravity_toggled(bool checked);
+    void on_checkBox_add_toggled(bool checked);   // Add のオンとオフで、GUIの背景色を黒にする/戻す
     void detrend_toggled(bool checked);   // File メニューの Detrend
     void show_importance();     // File メニューの Importance
     void show_tag_offset();     // File メニューの Tag Offset...(sacla_tag, sr_tag のオフセット)

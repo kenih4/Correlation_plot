@@ -1821,6 +1821,37 @@ void MainWindow::on_checkBox_highlight_toggled(bool checked)
     on_V_highlight_editingFinished();
 }
 
+// Add がオンの間は、GUI の背景を黒にする(ショットを捨てずに増やし続けている、という目印)。
+// 文字などが読めるように、文字は白、入力欄やリストの地は黒に近い灰色にする。
+// QPalette は子のウィジェットにも伝わる。グラフ(QCustomPlot)は、自分で背景を描くので、白のまま。
+// オフにすると、パレットの指定をやめて、元の(環境の)色に戻る。
+void MainWindow::on_checkBox_add_toggled(bool checked)
+{
+    if(!checked){
+        setPalette(QPalette());
+        return;
+    }
+    QPalette p;
+    p.setColor(QPalette::Window,QColor(0,0,0));
+    p.setColor(QPalette::WindowText,QColor(255,255,255));
+    p.setColor(QPalette::Base,QColor(16,16,16));
+    p.setColor(QPalette::AlternateBase,QColor(28,28,28));
+    p.setColor(QPalette::Text,QColor(255,255,255));
+    p.setColor(QPalette::Button,QColor(42,42,42));
+    p.setColor(QPalette::ButtonText,QColor(255,255,255));
+    p.setColor(QPalette::ToolTipBase,QColor(255,255,220));
+    p.setColor(QPalette::ToolTipText,QColor(0,0,0));
+    p.setColor(QPalette::PlaceholderText,QColor(150,150,150));
+    p.setColor(QPalette::Highlight,QColor(42,130,218));
+    p.setColor(QPalette::HighlightedText,QColor(255,255,255));
+    p.setColor(QPalette::Link,QColor(90,170,255));
+    // 無効なもの(グレーアウト)
+    p.setColor(QPalette::Disabled,QPalette::WindowText,QColor(128,128,128));
+    p.setColor(QPalette::Disabled,QPalette::Text,QColor(128,128,128));
+    p.setColor(QPalette::Disabled,QPalette::ButtonText,QColor(128,128,128));
+    setPalette(p);
+}
+
 void MainWindow::on_checkBox_gravity_toggled(bool)
 {
     on_V_highlight_editingFinished();       // 縦線・数値・十字印の判定を描き直す
