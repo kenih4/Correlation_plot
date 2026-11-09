@@ -34,6 +34,22 @@ Corr_data::Corr_data(int data_num,int f)
 Corr_data::~Corr_data(){
 
 }
+// タグが決まらなかったショット(route 769 が無い: 時間窓が空、または sr_tag が無い)を捨てる。
+// 残すと、時刻が不定(エポック)になってトレンドグラフの横軸が何十年にも広がり、
+// 信号の値もすべて 0 になって、散布図の (0,0) に点が出てしまう。自動更新(add_tag)も、同じ理由でこのようなショットは捨てている
+void Corr_data::drop_untagged()
+{
+    int before = (int)data.size();
+    data.erase(remove_if(data.begin(),data.end(),[](const Data &d){
+        return d.sacla_tag==0 || d.sr_tag==0 || d.beg_time.empty() || d.end_time.empty();
+    }),data.end());
+    int dropped = before - (int)data.size();
+    if(dropped>0){
+        size = (int)data.size();
+        ver++;
+        cerr << "[get] dropped " << dropped << " shot(s) whose sacla_tag/sr_tag could not be determined (see [tag] lines with 'not found')" << endl;
+    }
+}
 void Corr_data::get_tag(string endtime)
 {
     string sep5u = "sr_mon_screen_sep5u_otr/intensity";
@@ -126,6 +142,7 @@ void Corr_data::get_tag(string endtime)
             report(0,i+1,get_inf_cnt_sep5u);
         }
     }
+    drop_untagged();
 }
 void Corr_data::get_tag(string begtime,string endtime)
 {
@@ -179,6 +196,7 @@ void Corr_data::get_tag(string begtime,string endtime)
         }
         free(get_inf_sep5u);
     }
+    drop_untagged();
     sort(data.begin(),data.end());
 }
 

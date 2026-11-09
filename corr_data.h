@@ -61,6 +61,7 @@ public:
     Corr_data(int data_num,int f);
     ~Corr_data();
     void get_tag(string endtime);
+    void drop_untagged();       // タグが決まらなかったショットを捨てる
     void get_tag(string begtime,string endtime);
     void add_signal(string signal){
         Signal_param s = {signal,0,0,1,0,0,0,0};

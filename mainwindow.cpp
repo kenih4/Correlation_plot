@@ -532,6 +532,13 @@ void MainWindow::on_pushButton_clicked()
     int found = corrdata->tag_count();
     corrdata->db_get_sync_data();
     corrdata->set_progress(nullptr);               // prog が無くなる前に外す
+    if(corrdata->data_size()<2){                    // タグが決まったショットが足りない(捨てたものを除く)ので、描画しない
+        statusBar()->showMessage(QString("Get: 有効なショットが %1 件しかありません").arg(corrdata->data_size()));
+        QMessageBox::warning(this,"Correlation Plot",
+            QString("タグ(sacla_tag/sr_tag)が決まった有効なショットが %1 件しかなく、グラフを描けません。\n"
+                    "日時の指定や、DB の接続を確認してください。詳細はターミナルの [tag] の行にあります。").arg(corrdata->data_size()));
+        return;
+    }
     step("MIC などを計算中",90);
     for(int i=0;corr_debug() && i<corrdata->data_size();i++){
         DLOG<<"beg = "<<corrdata->begtime(i)<<
