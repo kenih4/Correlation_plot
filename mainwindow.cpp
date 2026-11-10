@@ -1056,7 +1056,7 @@ void MainWindow::switch_theme(const QString &name)
 // Plot Signal の全信号のトレンドグラフ(時刻 vs 値)を縦に並べる。
 //  - 各グラフの幅は、メインのトレンドグラフと同じ。横軸(時刻)の範囲も連動する
 //  - 信号ごとのチェックボックス(既定は全部オン)で、表示する/しないを選ぶ
-//  - 値はそのまま表示し、直近の Get で取れた最初の値に点線を引く。データ点には○を付ける
+//  - 値はそのまま表示し、直近の Get で取れたショットの平均値に点線を引く。データ点には○を付ける
 void MainWindow::open_trend_panel()
 {
     if(!trend_win){
@@ -1117,13 +1117,15 @@ void MainWindow::update_trend_panel()
 {
     if(!corrdata)return;
     const int n = corrdata->data_size(),ns = corrdata->sig_size();
-    // 基準値(ゼロ)は、Get した時点の最初のショットの値。パネルが閉じていても記録する
+    // 初期値は、Get した時点の全ショットの平均値。パネルが閉じていても記録する
+    auto mean_of = [this,n](int k){
+        double s = 0;
+        for(int i=0;i<n;i++)s += corrdata->value(corrdata->sig_name(k),i);
+        return n>0 ? s/n : 0.0;
+    };
     if(trend_rebase && n>0){
         trend_base.clear();
-        for(int i=0;i<ns;i++){
-            QString name = QString::fromStdString(corrdata->sig_name(i));
-            trend_base[name] = corrdata->value(corrdata->sig_name(i),0);
-        }
+        for(int i=0;i<ns;i++)trend_base[QString::fromStdString(corrdata->sig_name(i))] = mean_of(i);
         trend_rebase = false;
     }
     if(!trend_win || !trend_win->isVisible())return;
@@ -1195,13 +1197,13 @@ void MainWindow::update_trend_panel()
     for(int k=0;k<names.size();k++){
         const QString &name = names[k];
         TrendRow &row = trend_rows[name];
-        if(!trend_base.contains(name))trend_base[name] = corrdata->value(corrdata->sig_name(k),0);
+        if(!trend_base.contains(name))trend_base[name] = mean_of(k);
         const double b = trend_base[name];
         QVector<double> y(n);
         for(int i=0;i<n;i++)y[i] = corrdata->value(corrdata->sig_name(k),i);
         row.plot->graph(0)->setData(x,y);
         row.plot->graph(0)->rescaleValueAxis();
-        // 初期値(Get で取れた最初の値)の点線。縦軸の範囲に必ず入れる
+        // 初期値(Get で取れたショットの平均値)の点線。縦軸の範囲に必ず入れる
         if(!row.base_line){
             row.base_line = new QCPItemStraightLine(row.plot);
             row.base_line->setPen(QPen(T.muted,1.2,Qt::DashLine));
@@ -2675,7 +2677,7 @@ void MainWindow::createActions()
     fileMenu->addAction(tagOffsetAct);
 
     QAction *trendPanelAct = new QAction(tr("Trend &Panel..."), this);
-    trendPanelAct->setStatusTip(tr("Open a child panel with the trend graph of every signal in Plot Signal (dashed line at the first value of the last Get)"));
+    trendPanelAct->setStatusTip(tr("Open a child panel with the trend graph of every signal in Plot Signal (dashed line at the mean value of the last Get)"));
     connect(trendPanelAct, &QAction::triggered, this, &MainWindow::open_trend_panel);
     fileMenu->addAction(trendPanelAct);
 
