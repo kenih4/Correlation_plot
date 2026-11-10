@@ -1039,13 +1039,11 @@ void MainWindow::switch_theme(const QString &name)
     for(QListWidget *l : {ui->listWidget,ui->listWidget_2})
         for(int i=0;i<l->count();i++)apply_item_style(l->item(i));
     style_add_badge();
+    update_trend_highlight();
     for(auto it=trend_rows.begin();it!=trend_rows.end();++it){
         style_plot(it->plot);
         if(it->cursor)it->cursor->setPen(QPen(T.text,1.5,Qt::DashLine));
         if(it->base_line)it->base_line->setPen(QPen(T.muted,1.2,Qt::DashLine));
-        QCPGraph *g = it->plot->graph(0);
-        QColor col = g->pen().color();
-        g->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,QPen(col,1.2),QBrush(T.plot_bg),6));
         it->plot->replot();
     }
     for(QCustomPlot *p : plots)p->replot();
@@ -1193,6 +1191,7 @@ void MainWindow::update_trend_panel()
     QVector<double> x(n);
     for(int i=0;i<n;i++)
         x[i] = QDateTime::fromString(QString::fromStdString(corrdata->endtime(i)),"yyyy/MM/dd HH:mm:ss.z").toSecsSinceEpoch();
+    trend_x = x;
     trend_syncing = true;       // 横軸は、メインのトレンドグラフと同じ範囲にする(連動のループを防ぐ)
     for(int k=0;k<names.size();k++){
         const QString &name = names[k];
@@ -1202,6 +1201,7 @@ void MainWindow::update_trend_panel()
         QVector<double> y(n);
         for(int i=0;i<n;i++)y[i] = corrdata->value(corrdata->sig_name(k),i);
         row.plot->graph(0)->setData(x,y);
+        row.y = y;
         row.plot->graph(0)->rescaleValueAxis();
         // 初期値(Get で取れたショットの平均値)の点線。縦軸の範囲に必ず入れる
         if(!row.base_line){
@@ -1219,6 +1219,44 @@ void MainWindow::update_trend_panel()
         row.plot->replot(QCustomPlot::rpQueuedReplot);
     }
     trend_syncing = false;
+    update_trend_highlight();
+}
+
+// Highlight がオンのとき、メインのトレンドグラフと同じく、優秀なショット(基準信号が閾値以上)の点に
+// [Colors] highlight の色(MAIN_COLOR)を付ける。それ以外の点は通常の点の色(灰色系)にする。オフなら信号ごとの色
+void MainWindow::update_trend_highlight()
+{
+    if(!trend_win || trend_rows.isEmpty())return;
+    const ScatterData *s = scatter_xy.contains(ui->widget) ? &scatter_xy[ui->widget] : nullptr;
+    bool hl = ui->checkBox_highlight->isChecked() && s && s->hi.size()==s->x.size() && s->shot.size()==s->hi.size();
+    QVector<char> hi_by_shot;
+    if(hl){
+        hi_by_shot.fill(0,trend_x.size());
+        for(int k=0;k<s->shot.size();k++)
+            if(s->shot[k]>=0 && s->shot[k]<hi_by_shot.size())hi_by_shot[s->shot[k]] = s->hi[k];
+    }
+    for(auto it=trend_rows.begin();it!=trend_rows.end();++it){
+        TrendRow &row = it.value();
+        QCPGraph *g0 = row.plot->graph(0);
+        QColor col = g0->pen().color();
+        if(!row.hi_graph){
+            row.hi_graph = row.plot->addGraph();
+            row.hi_graph->setLineStyle(QCPGraph::lsNone);
+            row.hi_graph->setVisible(false);
+        }
+        if(hl && row.y.size()==hi_by_shot.size()){
+            g0->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,QPen(T.normal_point,1.2),QBrush(T.plot_bg),6));
+            QVector<double> hx,hy;
+            for(int i=0;i<hi_by_shot.size();i++)if(hi_by_shot[i]){hx.append(trend_x[i]);hy.append(row.y[i]);}
+            row.hi_graph->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,QPen(MAIN_COLOR,1.2),QBrush(MAIN_COLOR),7));
+            row.hi_graph->setData(hx,hy);
+            row.hi_graph->setVisible(true);
+        }else{
+            g0->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,QPen(col,1.2),QBrush(T.plot_bg),6));
+            row.hi_graph->setVisible(false);
+        }
+        row.plot->replot(QCustomPlot::rpQueuedReplot);
+    }
 }
 
 // メインのトレンドグラフで指しているショットの時刻に、子パネルの各グラフへ縦線を引く(指していなければ消す)
@@ -1777,6 +1815,7 @@ void MainWindow::apply_display(QCustomPlot *plot)
 {
     apply_display_impl(plot);
     apply_shape(plot);
+    if(plot==ui->widget)update_trend_highlight();       // 子パネルのトレンドにも、同じ強調を反映
 }
 
 // 点の形(横軸の信号名に「/phase」を含む散布図はひし形、それ以外は丸)を、点を描くすべてのグラフに反映する。

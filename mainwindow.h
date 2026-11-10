@@ -72,6 +72,7 @@ private slots:
     void open_trend_panel();        // File メニュー: 子パネル(Plot Signal の全信号のトレンドグラフ)
     void update_trend_panel();
     void fit_trend_panel_width();
+    void update_trend_highlight();  // 優秀なショットの点に highlight の色(メインのトレンドと同じ)
     void update_trend_cursor();     // メインのトレンドで指したショットの時刻に、子パネルへ縦線
     void open_config_files();   // File メニュー: 設定ディレクトリのテキストファイルを pluma で全部開く
     void open_baratsuki_hikaku();   // File メニュー: 別の GUI(settings.ini の [Tools] baratsuki_hikaku のフルパス)を開く
@@ -83,8 +84,9 @@ private:
     QWidget *trend_win = nullptr;
     QVBoxLayout *trend_lay = nullptr;
     QScrollArea *trend_scroll = nullptr;
-    struct TrendRow{QWidget *box = nullptr;QCheckBox *cb = nullptr;QCustomPlot *plot = nullptr;QCPItemStraightLine *cursor = nullptr;QCPItemStraightLine *base_line = nullptr;};
+    struct TrendRow{QWidget *box = nullptr;QCheckBox *cb = nullptr;QCustomPlot *plot = nullptr;QCPItemStraightLine *cursor = nullptr;QCPItemStraightLine *base_line = nullptr;QCPGraph *hi_graph = nullptr;QVector<double> y;};
     QMap<QString,TrendRow> trend_rows;      // 信号名 → 行
+    QVector<double> trend_x;                // 子パネルの横軸(各ショットの時刻)
     QStringList trend_order;                // 現在の行の信号名(順)
     QMap<QString,bool> trend_on;            // 信号ごとの表示チェック(既定オン)
     QMap<QString,double> trend_base;        // 信号ごとの初期値(Get で取れたショットの平均値。点線で示す)
