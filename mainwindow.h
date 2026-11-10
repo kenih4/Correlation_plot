@@ -83,11 +83,11 @@ private:
     QWidget *trend_win = nullptr;
     QVBoxLayout *trend_lay = nullptr;
     QScrollArea *trend_scroll = nullptr;
-    struct TrendRow{QWidget *box = nullptr;QCheckBox *cb = nullptr;QCustomPlot *plot = nullptr;QCPItemStraightLine *cursor = nullptr;};
+    struct TrendRow{QWidget *box = nullptr;QCheckBox *cb = nullptr;QCustomPlot *plot = nullptr;QCPItemStraightLine *cursor = nullptr;QCPItemStraightLine *base_line = nullptr;};
     QMap<QString,TrendRow> trend_rows;      // 信号名 → 行
     QStringList trend_order;                // 現在の行の信号名(順)
     QMap<QString,bool> trend_on;            // 信号ごとの表示チェック(既定オン)
-    QMap<QString,double> trend_base;        // 信号ごとの基準値(Get で取れた最初の値)
+    QMap<QString,double> trend_base;        // 信号ごとの初期値(Get で取れた最初の値。点線で示す)
     bool trend_rebase = false;              // 次の更新で基準値を取り直す(Get 直後)
     bool trend_syncing = false;
     void set_scatter_data(QCustomPlot *plot,const QVector<double> &x,const QVector<double> &y,const QVector<double> &yref,const QVector<int> &shot);

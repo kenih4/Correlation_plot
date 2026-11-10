@@ -1042,6 +1042,10 @@ void MainWindow::switch_theme(const QString &name)
     for(auto it=trend_rows.begin();it!=trend_rows.end();++it){
         style_plot(it->plot);
         if(it->cursor)it->cursor->setPen(QPen(T.text,1.5,Qt::DashLine));
+        if(it->base_line)it->base_line->setPen(QPen(T.muted,1.2,Qt::DashLine));
+        QCPGraph *g = it->plot->graph(0);
+        QColor col = g->pen().color();
+        g->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,QPen(col,1.2),QBrush(T.plot_bg),6));
         it->plot->replot();
     }
     for(QCustomPlot *p : plots)p->replot();
@@ -1052,7 +1056,7 @@ void MainWindow::switch_theme(const QString &name)
 // Plot Signal の全信号のトレンドグラフ(時刻 vs 値)を縦に並べる。
 //  - 各グラフの幅は、メインのトレンドグラフと同じ。横軸(時刻)の範囲も連動する
 //  - 信号ごとのチェックボックス(既定は全部オン)で、表示する/しないを選ぶ
-//  - 値は、直近の Get で取れた最初の値を 0 とした差(信号ごとにベースが違うため)
+//  - 値はそのまま表示し、直近の Get で取れた最初の値に点線を引く。データ点には○を付ける
 void MainWindow::open_trend_panel()
 {
     if(!trend_win){
@@ -1151,10 +1155,12 @@ void MainWindow::update_trend_panel()
             QColor col = QColor::fromHsv((i*47)%360,170,235);
             if(!T.dark)col = QColor::fromHsv((i*47)%360,220,170);
             row.plot->graph(0)->setPen(QPen(col,1.5));
+            row.plot->graph(0)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,QPen(col,1.2),QBrush(T.plot_bg),6));
+            
             QSharedPointer<QCPAxisTickerDateTime> dateTicker(new QCPAxisTickerDateTime);
             dateTicker->setDateTimeFormat("HH:mm:ss");
             row.plot->xAxis->setTicker(dateTicker);
-            row.plot->yAxis->setLabel(QString::fromUtf8("Δ from first"));
+            row.plot->yAxis->setLabel("value");
             row.plot->setInteractions(QCP::iRangeDrag|QCP::iRangeZoom);
             row.plot->axisRect()->setRangeDrag(Qt::Horizontal);
             row.plot->axisRect()->setRangeZoom(Qt::Horizontal);
@@ -1192,9 +1198,21 @@ void MainWindow::update_trend_panel()
         if(!trend_base.contains(name))trend_base[name] = corrdata->value(corrdata->sig_name(k),0);
         const double b = trend_base[name];
         QVector<double> y(n);
-        for(int i=0;i<n;i++)y[i] = corrdata->value(corrdata->sig_name(k),i) - b;
+        for(int i=0;i<n;i++)y[i] = corrdata->value(corrdata->sig_name(k),i);
         row.plot->graph(0)->setData(x,y);
         row.plot->graph(0)->rescaleValueAxis();
+        // 初期値(Get で取れた最初の値)の点線。縦軸の範囲に必ず入れる
+        if(!row.base_line){
+            row.base_line = new QCPItemStraightLine(row.plot);
+            row.base_line->setPen(QPen(T.muted,1.2,Qt::DashLine));
+        }
+        row.base_line->point1->setCoords(0,b);
+        row.base_line->point2->setCoords(1,b);
+        QCPRange yr = row.plot->yAxis->range();
+        if(b<yr.lower || b>yr.upper){
+            yr.expand(QCPRange(b,b));
+            row.plot->yAxis->setRange(yr);
+        }
         row.plot->xAxis->setRange(ui->widget->xAxis->range());
         row.plot->replot(QCustomPlot::rpQueuedReplot);
     }
@@ -2657,7 +2675,7 @@ void MainWindow::createActions()
     fileMenu->addAction(tagOffsetAct);
 
     QAction *trendPanelAct = new QAction(tr("Trend &Panel..."), this);
-    trendPanelAct->setStatusTip(tr("Open a child panel with the trend graph of every signal in Plot Signal (starting from 0 at the first value of the last Get)"));
+    trendPanelAct->setStatusTip(tr("Open a child panel with the trend graph of every signal in Plot Signal (dashed line at the first value of the last Get)"));
     connect(trendPanelAct, &QAction::triggered, this, &MainWindow::open_trend_panel);
     fileMenu->addAction(trendPanelAct);
 
