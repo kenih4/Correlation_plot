@@ -39,6 +39,7 @@ static const char *CSV_FILE = "/home_2023/xfel/xfelopr/users/kenichi/dvlp/corr_d
 //   dark-amber    : 暗い暖色の背景(琥珀色)   dark-navy     : 暗い紺色の背景(青)
 //   dark-pink     : 別プロジェクト trend の「Dark Pink」と同じ配色(背景 #2a0f1e、文字 #f3d3e4、ホットピンク)
 //   dark-pink-deep / -rich / -soft : dark-pink のピンクの濃さ違い(deep=黒に近い、rich=濃いピンク、soft=明るいピンク)
+//   dark-pink-deeper / -deepest : deep よりさらに黒に近い(deepest は背景が真っ黒で、ピンクは強調の色だけ)
 //   classic       : 以前の、白い背景のグラフ
 // さらに [Colors](load_colors)で、強調の色と最新の点の色を個別に上書きできる(classic のときだけ)。
 struct Theme{
@@ -56,7 +57,7 @@ struct Theme{
 // メニューに出すテーマ(名前, 表示名)
 static const QList<QPair<QString,QString>> THEME_LIST = {
     {"dark","Dark (Teal)"},{"dark-contrast","Dark High Contrast"},{"dark-amber","Dark Amber"},{"dark-navy","Dark Navy"},
-    {"dark-pink-deep","Dark Pink (Deep)"},{"dark-pink","Dark Pink"},{"dark-pink-rich","Dark Pink (Rich)"},{"dark-pink-soft","Dark Pink (Soft)"},
+    {"dark-pink-deepest","Dark Pink (Deepest)"},{"dark-pink-deeper","Dark Pink (Deeper)"},{"dark-pink-deep","Dark Pink (Deep)"},{"dark-pink","Dark Pink"},{"dark-pink-rich","Dark Pink (Rich)"},{"dark-pink-soft","Dark Pink (Soft)"},
     {"classic","Classic (Light)"}};
 static QString g_theme_name = "dark";
 static Theme T;
@@ -129,7 +130,11 @@ static void set_theme(QString name)
         // trend の Dark Pink(背景 #2a0f1e、文字 #f3d3e4、強調 hotpink、平均 #ffe0f0)を基準に、背景のピンクの濃さを変える
         //   deep: 黒に近い赤紫 / (標準) / rich: 濃いピンク / soft: 明るいピンク
         const char *np = "#D9A5C0";
-        if(name=="dark-pink-deep"){
+        if(name=="dark-pink-deepest"){
+            base("#000000","#040002","#240A1A","#f8dcea","#A8789A","#FF1F8E","#1A0A14","#45203A");  np = "#B878A4";
+        }else if(name=="dark-pink-deeper"){
+            base("#0A0408","#10060B","#2E1022","#f3d3e4","#B07F99","#FF2E93","#240E1B","#552544");  np = "#BE80A8";
+        }else if(name=="dark-pink-deep"){
             base("#12060D","#1b0a13","#40182e","#f3d3e4","#b88aa3","#FF3D9A","#33152A","#6a2f50");  np = "#C78AAE";
         }else if(name=="dark-pink-rich"){
             base("#2b0f21","#3f1530","#7a3a5c","#fbe3ee","#d6a9c2","#FF7DC0","#5e2a49","#a05580");  np = "#E8BCD2";
