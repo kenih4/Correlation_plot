@@ -1284,6 +1284,7 @@ void MainWindow::update_trend_panel()
             QColor col = QColor::fromHsv((i*47)%360,170,235);
             if(!T.dark)col = QColor::fromHsv((i*47)%360,220,170);
             row.plot->graph(0)->setPen(QPen(col,1.5));
+            row.plot->graph(0)->setLineStyle(QCPGraph::lsNone);      // 実線は引かず、データ点だけ
             row.plot->graph(0)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,QPen(col,1.2),QBrush(T.plot_bg),6));
             
             QSharedPointer<QCPAxisTickerDateTime> dateTicker(new QCPAxisTickerDateTime);
