@@ -25,6 +25,7 @@
 #include <QVBoxLayout>
 #include <QLabel>
 #include <QCheckBox>
+#include <QInputDialog>
 #include <QMessageBox>
 
 // 自動更新ごとに書き出すCSV
@@ -148,6 +149,20 @@ static QCPScatterStyle point_style(const QColor &col,bool filled)
     return QCPScatterStyle(QCPScatterStyle::ssCircle,QPen(col,T.point_pen),QBrush(fill),T.point_size);
 }
 
+static QString ini_string(QSettings &st,const QString &key,const QString &def);     // 定義は後ろ(settings.ini の値を文字列で読む)
+
+// Target Signal リストの項目: 信号名と重みを持つ(表示は「信号名   [w=重み]」)
+static const int TNAME_ROLE = Qt::UserRole + 2;
+static const int TWEIGHT_ROLE = Qt::UserRole + 3;
+static QString target_item_name(const QListWidgetItem *it){return it ? it->data(TNAME_ROLE).toString() : QString();}
+static double target_item_weight(const QListWidgetItem *it){return it ? it->data(TWEIGHT_ROLE).toDouble() : 1.0;}
+static void set_target_item(QListWidgetItem *it,const QString &name,double w)
+{
+    it->setData(TNAME_ROLE,name);
+    it->setData(TWEIGHT_ROLE,w);
+    it->setText(QString("%1   [w=%2]").arg(name).arg(w,0,'g',6));
+}
+
 // 設定ファイルのディレクトリ。実行時の引数で指定されたときはそれ、なければ ~/.config/Correlation_plot
 static QString g_config_dir;
 
@@ -233,19 +248,32 @@ MainWindow::MainWindow(QWidget *parent)
         ui->listWidget->addItem("xfel_mon_msbpm_bc2_x/position");
         ui->listWidget->addItem("xfel_mon_msbpm_bc3_x/position");
     }
-    if(!load_signal_list(ui->listWidget_2,"signals_denominator.txt")){
-        ui->listWidget_2->addItem("sr_mon_bpm_xsbt_20_sum/charge");
-        ui->listWidget_2->addItem("sr_mon_bpm_xsbt_21_sum/charge");
+    // 基準信号のリスト(targets.txt: 1行1信号「信号名  重み」)。無ければ、これまでの設定を引き継いで
+    // Plot Signal の先頭(これまでの基準信号)を、重み 1 の基準信号にする
+    if(!load_targets()){
+        if(ui->listWidget->count()>0){
+            QListWidgetItem *first = ui->listWidget->takeItem(0);
+            add_target_item(first->text(),1.0);
+            delete first;
+            cerr << "NOTE: targets.txt not found; the first Plot Signal was moved to the Target Signal list (weight 1)." << endl;
+        }
+        save_targets();
+    }
+    // 基準信号と同じ名前の信号は、Plot Signal(説明変数)から外す
+    for(int i=ui->listWidget->count();i-->0;){
+        QString nm = ui->listWidget->item(i)->text();
+        for(int k=0;k<ui->listWidget_2->count();k++){
+            if(target_item_name(ui->listWidget_2->item(k))==nm){delete ui->listWidget->takeItem(i);break;}
+        }
     }
     // listWidget, listWidget_2 が変更されたら信号リストファイルに保存する
     connect_save_signal_list(ui->listWidget,"signals.txt");
     ui->listWidget->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(ui->listWidget,&QListWidget::customContextMenuRequested,this,&MainWindow::list_context_menu);
-    connect_save_signal_list(ui->listWidget_2,"signals_denominator.txt");
-    QFont lFont = font();
-    lFont.setBold(true);
-    ui->listWidget->item(0)->setFont(lFont);
-    ui->listWidget_2->item(0)->setFont(lFont);
+    connect(ui->listWidget_2->model(),&QAbstractItemModel::rowsInserted,this,[this](){save_targets();});
+    connect(ui->listWidget_2->model(),&QAbstractItemModel::rowsRemoved,this,[this](){save_targets();});
+    ui->listWidget_2->setToolTip(tr("Target signals (the signals you want to maximize). Double-click to change the weight (negative = minimize)."));
+    load_target_settings();
 
     create_tree();
     ui->V_threshold->setText(QString::number(0.05));
@@ -256,7 +284,7 @@ MainWindow::MainWindow(QWidget *parent)
     timer->setInterval(15000);
     connect(timer, SIGNAL(timeout()), this, SLOT(update_data()));
     timer->start();
-    corrdata = new Corr_data(ui->spinBox->value(),ui->checkBox_calc->checkState());
+    corrdata = new Corr_data(ui->spinBox->value());
     corrdata->set_stats(stats_act->isChecked());
     corrdata->set_tag_offset(tag_off_sacla,tag_off_sr);
     corrdata->set_detrend(detrend_act->isChecked());
@@ -376,6 +404,95 @@ void MainWindow::connect_save_signal_list(QListWidget *list, const QString &name
     auto save = [this, list, name](){ save_signal_list(list, name); };
     connect(list->model(), &QAbstractItemModel::rowsInserted, this, save);
     connect(list->model(), &QAbstractItemModel::rowsRemoved, this, save);
+}
+
+// ===== 基準信号(Target Signal) =====
+// targets.txt: 1行1信号「信号名  重み」(重みは省略すると 1。'#' で始まる行は無視)
+bool MainWindow::load_targets()
+{
+    QFile fp(signal_list_file("targets.txt"));
+    if(!fp.open(QIODevice::ReadOnly | QIODevice::Text))return false;
+    QTextStream in(&fp);
+    while(!in.atEnd()){
+        QString line = in.readLine().trimmed();
+        if(line.isEmpty() || line.startsWith('#'))continue;
+        QStringList tok = line.split(QRegularExpression("\\s+"),Qt::SkipEmptyParts);
+        double w = 1.0;
+        if(tok.size()>1){
+            bool ok = false;
+            double v = tok[1].toDouble(&ok);
+            if(ok)w = v;
+            else cerr << "WARNING: targets.txt: weight '" << tok[1].toStdString() << "' of " << tok[0].toStdString() << " is not a number; using 1" << endl;
+        }
+        add_target_item(tok[0],w);
+    }
+    cerr << "Load targets : " << signal_list_file("targets.txt").toStdString() << "  (" << ui->listWidget_2->count() << " targets)" << endl;
+    return ui->listWidget_2->count()>0;
+}
+
+void MainWindow::save_targets()
+{
+    QString fname = signal_list_file("targets.txt");
+    QDir().mkpath(QFileInfo(fname).absolutePath());
+    QFile fp(fname);
+    if(!fp.open(QIODevice::WriteOnly | QIODevice::Text)){
+        qWarning().noquote() << "Cannot write targets file  " << fname;
+        return;
+    }
+    QTextStream out(&fp);
+    out << "# Target signals (the signals to maximize):  signal_name  weight   (negative weight = minimize)" << Qt::endl;
+    for(int i=0;i<ui->listWidget_2->count();++i){
+        QListWidgetItem *it = ui->listWidget_2->item(i);
+        out << target_item_name(it) << "    " << QString::number(target_item_weight(it),'g',10) << Qt::endl;
+    }
+}
+
+void MainWindow::add_target_item(const QString &name,double w)
+{
+    QListWidgetItem *it = new QListWidgetItem;
+    set_target_item(it,name,w);
+    ui->listWidget_2->addItem(it);
+}
+
+// settings.ini [Target]:  combine=sum|min   normalize=auto|zscore|none
+void MainWindow::load_target_settings()
+{
+    QFileInfo fi(signal_list_file("settings.ini"));
+    if(!fi.exists())return;
+    QSettings st(fi.absoluteFilePath(),QSettings::IniFormat);
+    QString cb = ini_string(st,"Target/combine","sum").toLower();
+    QString nm = ini_string(st,"Target/normalize","auto").toLower();
+    if(cb=="min")target_combine = Corr_data::COMBINE_MIN;
+    else if(cb!="sum")cerr << "WARNING: settings.ini Target/combine must be sum or min; using sum" << endl;
+    if(nm=="zscore")target_normalize = Corr_data::NORM_ZSCORE;
+    else if(nm=="none")target_normalize = Corr_data::NORM_NONE;
+    else if(nm!="auto")cerr << "WARNING: settings.ini Target/normalize must be auto, zscore or none; using auto" << endl;
+}
+
+// Target Signal リスト(名前と重み)と合成の方法を、corrdata に渡す。変わったら true
+bool MainWindow::sync_targets()
+{
+    vector<Corr_data::Target> v;
+    for(int i=0;i<ui->listWidget_2->count();++i){
+        QListWidgetItem *it = ui->listWidget_2->item(i);
+        v.push_back({target_item_name(it).toStdString(),target_item_weight(it)});
+    }
+    return corrdata->set_targets(v,target_combine,target_normalize);
+}
+
+// 重みや合成の方法が変わったとき、保持しているデータで合成値を計算し直して描き直す(DBは読まない)。
+// 基準信号の名前が変わっているときは、新しい信号の値が無いので、次の Get / 自動更新で反映する
+void MainWindow::targets_changed()
+{
+    corrdata->rank_init();
+    if(!has_calculated)return;
+    bool same = corrdata->target_count()==ui->listWidget_2->count();
+    for(int k=0;same && k<ui->listWidget_2->count();k++)
+        same = (QString::fromStdString(corrdata->target_name(k))==target_item_name(ui->listWidget_2->item(k)));
+    if(!same)return;
+    sync_targets();
+    refresh_plots();
+    plot_trend(ui->widget);
 }
 
 MainWindow::~MainWindow()
@@ -498,9 +615,13 @@ void MainWindow::mousePress()
 
 void MainWindow::on_pushButton_clicked()
 {
-    trend_rebase = true;        // 子パネルの基準値(ゼロ)は、この Get で取れた最初の値にする
+    if(ui->listWidget_2->count()==0){
+        QMessageBox::warning(this,"Correlation Plot","基準信号(Target Signal)が1つもありません。\n信号ツリーの上の「Target Signal」を選んでから、信号をダブルクリックして追加してください。");
+        return;
+    }
+    trend_rebase = true;        // 子パネルの初期値(点線)は、この Get で取れたショットの平均値にする
     delete corrdata;
-    corrdata = new Corr_data(ui->spinBox->value(),ui->checkBox_calc->checkState());
+    corrdata = new Corr_data(ui->spinBox->value());
     corrdata->set_stats(stats_act->isChecked());
     corrdata->set_tag_offset(tag_off_sacla,tag_off_sr);
     if(tag_off_sacla!=0 || tag_off_sr!=0){
@@ -510,15 +631,12 @@ void MainWindow::on_pushButton_clicked()
     corrdata->set_detrend(detrend_act->isChecked());
     corrdata->set_rank_mode(rank_mode());
 
+    sync_targets();         // 基準信号(重み、合成の方法)を先に渡す。説明変数は、これと同じ名前のものを追加しない
     for(int i= 0;i<ui->listWidget->count();++i){
         corrdata->add_signal(ui->listWidget->item(i)->text().toStdString().c_str());
     }
-    for(int i= 0;i<ui->listWidget_2->count();++i){
-        corrdata->add_signal_d(ui->listWidget_2->item(i)->text().toStdString().c_str());
 
-    }
-
-    // 進捗表示: ダイアログ(0〜100%)とステータスバー。段階ごとの割合は、タグ40%・値40%・分母10%・計算と描画10%
+    // 進捗表示: ダイアログ(0〜100%)とステータスバー。段階ごとの割合は、タグ45%・値45%・計算と描画10%
     struct BusyGuard{bool &f;BusyGuard(bool &b):f(b){f = true;}~BusyGuard(){f = false;}} busy_guard(get_busy);
     QProgressDialog prog("Get",QString(),0,100,this);
     prog.setWindowTitle("Get");
@@ -533,8 +651,8 @@ void MainWindow::on_pushButton_clicked()
     };
     step("Get: start",0);
     corrdata->set_progress([&step](int stage,int done,int total){
-        static const char *names[] = {"ショットを検索してタグを決定中","信号の値を取得中","分母の信号の値を取得中"};
-        static const int base[] = {0,40,80},span[] = {40,40,10};
+        static const char *names[] = {"ショットを検索してタグを決定中","信号の値を取得中"};
+        static const int base[] = {0,45},span[] = {45,45};
         int v = base[stage] + (total>0 ? span[stage]*done/total : span[stage]);
         step(QString("%1  %2 / %3").arg(names[stage]).arg(done).arg(total),v);
     });
@@ -627,7 +745,6 @@ void MainWindow::plot_trend(QCustomPlot *plot)
     for(int i=0;i<corrdata->data_size();i++){
         x[i] = QDateTime::fromString(QString::fromStdString(corrdata->endtime(i)),"yyyy/MM/dd HH:mm:ss.z").toSecsSinceEpoch();
         y[i] = corrdata->value(name_y0,i);
-        //        y[i] = corrdata->value(corrdata->sig_name(0),i)/(corrdata->denominator(corrdata->sig_d_name(0),i)*1e-9/(1.60219e-19))*100;
     }
     //    DLOG<<"****  "<<corrdata->sig_name(n)<<"  2****"<<endl;
     QVector<int> shot_all(x.size());
@@ -651,10 +768,7 @@ void MainWindow::plot_trend(QCustomPlot *plot)
     //plot->graph(0)->rescaleAxes(true);
     //    DLOG<<"****  "<<corrdata->sig_name(n)<<"  3****"<<endl;
     plot->xAxis->setLabel("time");
-    plot->yAxis->setLabel(tr(corrdata->sig_name(0).c_str()));
-    if(ui->checkBox_calc->checkState()==Qt::Checked){
-        plot->yAxis->setLabel("calc efficiency");
-    }
+    plot->yAxis->setLabel(QString::fromStdString(corrdata->target_label()));
     plot->axisRect()->insetLayout()->setInsetAlignment(0,Qt::AlignTop|Qt::AlignRight);
     plot->setInteractions(QCP::iRangeDrag|QCP::iRangeZoom);
     //    DLOG<<"****  "<<corrdata->sig_name(n)<<"  4****"<<endl;
@@ -1047,7 +1161,7 @@ void MainWindow::switch_theme(const QString &name)
         tracerText->setColor(T.text);
     }
     // リストの「mean_label」の文字色
-    for(QListWidget *l : {ui->listWidget,ui->listWidget_2})
+    for(QListWidget *l : {ui->listWidget})
         for(int i=0;i<l->count();i++)apply_item_style(l->item(i));
     style_add_badge();
     update_trend_highlight();
@@ -1126,22 +1240,26 @@ void MainWindow::update_trend_panel()
 {
     if(!corrdata)return;
     const int n = corrdata->data_size(),ns = corrdata->sig_size();
+    // 子パネルに出す信号: 合成した基準値、基準信号、説明変数の順
+    QStringList names;
+    for(int i=0;i<ns;i++){
+        names << QString::fromStdString(corrdata->sig_name(i));
+        if(i==0)for(int k=0;k<corrdata->target_count();k++)names << QString::fromStdString(corrdata->target_name(k));
+    }
     // 初期値は、Get した時点の全ショットの平均値。パネルが閉じていても記録する
-    auto mean_of = [this,n](int k){
+    auto mean_of = [this,n](const QString &name){
         double s = 0;
-        for(int i=0;i<n;i++)s += corrdata->value(corrdata->sig_name(k),i);
+        for(int i=0;i<n;i++)s += corrdata->value(name.toStdString(),i);
         return n>0 ? s/n : 0.0;
     };
     if(trend_rebase && n>0){
         trend_base.clear();
-        for(int i=0;i<ns;i++)trend_base[QString::fromStdString(corrdata->sig_name(i))] = mean_of(i);
+        for(const QString &nm : names)trend_base[nm] = mean_of(nm);
         trend_rebase = false;
     }
     if(!trend_win || !trend_win->isVisible())return;
     if(n<1 || ns<1)return;
 
-    QStringList names;
-    for(int i=0;i<ns;i++)names << QString::fromStdString(corrdata->sig_name(i));
     if(names!=trend_order){         // 信号の構成が変わったので、行を作り直す(チェックの状態は信号名で覚えている)
         for(auto it=trend_rows.begin();it!=trend_rows.end();++it){
             trend_lay->removeWidget(it->box);
@@ -1156,7 +1274,7 @@ void MainWindow::update_trend_panel()
             QVBoxLayout *l = new QVBoxLayout(row.box);
             l->setContentsMargins(0,0,0,0);
             l->setSpacing(0);
-            row.cb = new QCheckBox(name,row.box);
+            row.cb = new QCheckBox(name==QString::fromStdString(Corr_data::target_name_virtual()) ? QString::fromStdString(corrdata->target_label())+"  (combined target)" : name,row.box);
             row.cb->setChecked(trend_on.value(name,true));
             row.plot = new QCustomPlot(row.box);
             row.plot->setFixedHeight(150);
@@ -1207,10 +1325,10 @@ void MainWindow::update_trend_panel()
     for(int k=0;k<names.size();k++){
         const QString &name = names[k];
         TrendRow &row = trend_rows[name];
-        if(!trend_base.contains(name))trend_base[name] = mean_of(k);
+        if(!trend_base.contains(name))trend_base[name] = mean_of(name);
         const double b = trend_base[name];
         QVector<double> y(n);
-        for(int i=0;i<n;i++)y[i] = corrdata->value(corrdata->sig_name(k),i);
+        for(int i=0;i<n;i++)y[i] = corrdata->value(name.toStdString(),i);
         row.plot->graph(0)->setData(x,y);
         row.y = y;
         row.plot->graph(0)->rescaleValueAxis();
@@ -1703,7 +1821,7 @@ void MainWindow::update_highlight_mask(QCustomPlot *plot)
 bool MainWindow::mean_label_enabled(const QString &signal)
 {
     bool any = false,hit = false;
-    for(int i=1;i<ui->listWidget->count();i++){
+    for(int i=0;i<ui->listWidget->count();i++){
         QListWidgetItem *it = ui->listWidget->item(i);
         if(!item_has_flag(it,FLAG_MEAN_LABEL))continue;
         any = true;
@@ -1730,10 +1848,6 @@ void MainWindow::list_context_menu(const QPoint &pos)
     QAction *act = menu.addAction(tr("Show mean label"));
     act->setCheckable(true);
     act->setChecked(item_has_flag(it,FLAG_MEAN_LABEL));
-    if(ui->listWidget->row(it)==0){
-        act->setEnabled(false);     // 基準信号(先頭)は散布図の横軸にならない
-        act->setText(tr("Show mean label (not for the base signal)"));
-    }
     if(menu.exec(ui->listWidget->viewport()->mapToGlobal(pos))!=act)return;
 
     QStringList flags = it->data(FLAGS_ROLE).toStringList();
@@ -1946,7 +2060,7 @@ QString MainWindow::calc_signature()
     QStringList parts;
     parts << QString::number(ui->checkBox_th->checkState())
           << ui->V_threshold->text()
-          << QString::number(ui->checkBox_calc->checkState())
+          << QString::number(target_combine) << QString::number(target_normalize)
           << QString::number(detrend_act->isChecked())
           << QString::number(stats_act->isChecked())
           << QString::number(rank_mode())
@@ -1956,7 +2070,7 @@ QString MainWindow::calc_signature()
           << QString::number(ui->spinBox->value());
     for(int i=0;i<ui->listWidget->count();i++)parts << ui->listWidget->item(i)->text();
     parts << "|";
-    for(int i=0;i<ui->listWidget_2->count();i++)parts << ui->listWidget_2->item(i)->text();
+    for(int i=0;i<ui->listWidget_2->count();i++)parts << ui->listWidget_2->item(i)->text();      // 基準信号(名前と重み)
     return parts.join("\n");
 }
 
@@ -2008,7 +2122,7 @@ int MainWindow::rank_mode() const
 void MainWindow::update_rank_scores(int beg,int end)
 {
     if(rank_mode()==Corr_data::RANK_LIST){
-        // Plot Signal リストの上から順(最初の項目は基準信号)
+        // Plot Signal リストの上から順
         vector<string> names;
         for(int i=0;i<ui->listWidget->count();i++)names.push_back(ui->listWidget->item(i)->text().toStdString());
         corrdata->update_list_order(names);
@@ -2045,7 +2159,7 @@ void MainWindow::check_config_files()
     struct Item{const char *file;const char *meaning;};
     const Item items[] = {
         {"signals.txt",             "信号リスト(既定の8信号を使用)"},
-        {"signals_denominator.txt", "分母の信号リスト(既定の2信号を使用)"},
+        {"targets.txt",             "基準信号のリスト(無ければ、Plot Signal の先頭を重み1の基準信号にして作成)"},
         {"tree_groups.txt",         "信号ツリーのグループ名(既定の14グループを使用)"},
         {"settings.ini",            "最新ショットの平均のショット数、Highlight の閾値の決め方(最新5ショット、上位25%を使用)"},
     };
@@ -2234,7 +2348,7 @@ void MainWindow::show_importance()
     QVBoxLayout *lay = new QVBoxLayout(dlg);
 
     QString head = QString("Target : %1%2\nShots : %3    OOB R2 : %4")
-            .arg(QString::fromStdString(corrdata->sig_name(0)))
+            .arg(QString::fromStdString(corrdata->target_label()))
             .arg(detrend_act->isChecked() ? " (detrended)" : "")
             .arg(nrows).arg(r2,0,'f',3);
     QLabel *label = new QLabel(head,dlg);
@@ -2482,10 +2596,7 @@ void MainWindow::plot_data(QCustomPlot *plot,int n)
     }
 
     plot->xAxis->setLabel(tr(corrdata->sig_name(n).c_str()));
-    plot->yAxis->setLabel(tr(corrdata->sig_name(0).c_str()));
-    if(ui->checkBox_calc->checkState()==Qt::Checked){
-        plot->yAxis->setLabel("calc efficiency");
-    }
+    plot->yAxis->setLabel(QString::fromStdString(corrdata->target_label()));
     if(dt){
         plot->xAxis->setLabel(plot->xAxis->label()+" (detrended)");
         plot->yAxis->setLabel(plot->yAxis->label()+" (detrended)");
@@ -2509,10 +2620,13 @@ void MainWindow::on_treeWidget_itemDoubleClicked(QTreeWidgetItem *item, int colu
 
     if(ui->radioButton_2->isChecked()){
         for(int i= 0;i<ui->listWidget_2->count();++i){
-            DLOG<<ui->listWidget_2->item(i)->text().toStdString()<<endl;
-            if(ui->listWidget_2->item(i)->text().toStdString().compare(item->text(column).toStdString())==0)return;
+            if(target_item_name(ui->listWidget_2->item(i))==item->text(column))return;
         }
-        ui->listWidget_2->addItem(item->text(column));
+        // 基準信号になった信号は、Plot Signal(説明変数)から外す
+        for(int i=ui->listWidget->count();i-->0;){
+            if(ui->listWidget->item(i)->text()==item->text(column))delete ui->listWidget->takeItem(i);
+        }
+        add_target_item(item->text(column),1.0);
     }else{
         for(int i= 0;i<ui->listWidget->count();++i){
             DLOG<<ui->listWidget->item(i)->text().toStdString()<<endl;
@@ -2593,19 +2707,14 @@ void MainWindow::on_pushButton_delete_clicked()
     corrdata->rank_init();
 }
 
+// Plot Signal リスト: ダブルクリックした信号を、リストの先頭へ移す(「Rank by Plot Signal list」の並びに使う)
 void MainWindow::on_listWidget_doubleClicked(const QModelIndex &index)
 {
     QListWidgetItem* currentItem = ui->listWidget->takeItem( index.row());
-    QFont lFont = font();
-    lFont.setBold(false);
-    ui->listWidget->item(0)->setFont(lFont);
     if ( NULL != currentItem )
     {
         ui->listWidget->insertItem(0,currentItem);
     }
-    lFont.setBold(true);
-    ui->listWidget->item(0)->setFont(lFont);
-
 }
 
 void MainWindow::on_pushButton_2_clicked()
@@ -2621,11 +2730,9 @@ void MainWindow::update_data()
     // 起動後、最初の Get(または Plot)でデータを取得するまでは、自動更新しない
     if(!has_calculated)return;
 
+    sync_targets();
     for(int i= 0;i<ui->listWidget->count();++i){
         corrdata->add_signal(ui->listWidget->item(i)->text().toStdString().c_str());
-    }
-    for(int i= 0;i<ui->listWidget_2->count();++i){
-        corrdata->add_signal_d(ui->listWidget_2->item(i)->text().toStdString().c_str());
     }
 
     ui->dateTimeEdit->setDateTime(QDateTime::currentDateTime());
@@ -2682,26 +2789,21 @@ void MainWindow::update_data()
 
 }
 
+// Target Signal リスト: ダブルクリックで、その基準信号の重みを変える(負の重みは、その信号を小さくしたいという意味)
 void MainWindow::on_listWidget_2_doubleClicked(const QModelIndex &index)
 {
-    QListWidgetItem* currentItem = ui->listWidget_2->takeItem( index.row());
-    QFont lFont = font();
-    lFont.setBold(false);
-    ui->listWidget_2->item(0)->setFont(lFont);
-
-    if ( NULL != currentItem )
-    {
-        ui->listWidget_2->insertItem(0,currentItem);
-    }
-    lFont.setBold(true);
-    ui->listWidget_2->item(0)->setFont(lFont);
-
+    QListWidgetItem *it = ui->listWidget_2->item(index.row());
+    if(!it)return;
+    bool ok = false;
+    double w = QInputDialog::getDouble(this,"Target weight",
+        QString("%1\n\nWeight (negative = minimize this signal, 0 = ignore):").arg(target_item_name(it)),
+        target_item_weight(it),-1000,1000,3,&ok);
+    if(!ok)return;
+    set_target_item(it,target_item_name(it),w);
+    save_targets();
+    targets_changed();
 }
 
-void MainWindow::on_checkBox_calc_stateChanged(int arg1)
-{
-    corrdata->set_flg(arg1);
-}
 void MainWindow::createActions()
 {
 
@@ -2746,6 +2848,18 @@ void MainWindow::createActions()
     fileMenu->addAction(rank_imp_act);
     fileMenu->addAction(rank_gap_act);
     fileMenu->addAction(rank_list_act);
+
+    // 基準信号が複数あるときの合成の方法(排他選択)
+    fileMenu->addSeparator();
+    QActionGroup *combineGroup = new QActionGroup(this);
+    QAction *sumAct = new QAction(tr("Target: &Sum of weighted values"), this);
+    QAction *minAct = new QAction(tr("Target: Mi&n (every target must be good)"), this);
+    sumAct->setStatusTip(tr("Combined target = sum of weight x (z-score) of the targets"));
+    minAct->setStatusTip(tr("Combined target = the worst weighted target (weighted Chebyshev): picks shots where all targets are good at once"));
+    for(QAction *a : {sumAct,minAct}){a->setCheckable(true);combineGroup->addAction(a);fileMenu->addAction(a);}
+    (target_combine==Corr_data::COMBINE_MIN ? minAct : sumAct)->setChecked(true);
+    connect(sumAct,&QAction::triggered,this,[this](){target_combine = Corr_data::COMBINE_SUM;targets_changed();});
+    connect(minAct,&QAction::triggered,this,[this](){target_combine = Corr_data::COMBINE_MIN;targets_changed();});
     connect(rank_group, &QActionGroup::triggered, this, &MainWindow::rank_mode_changed);
     fileMenu->addSeparator();
     fileMenu->addAction(detrend_act);
@@ -2916,10 +3030,7 @@ void MainWindow::plot_data(QCustomPlot *plot,int n,int beg,int end)
     }
 
     plot->xAxis->setLabel(tr(corrdata->sig_name(n).c_str()));
-    plot->yAxis->setLabel(tr(corrdata->sig_name(0).c_str()));
-    if(ui->checkBox_calc->checkState()==Qt::Checked){
-        plot->yAxis->setLabel("calc efficiency");
-    }
+    plot->yAxis->setLabel(QString::fromStdString(corrdata->target_label()));
     if(dt){
         plot->xAxis->setLabel(plot->xAxis->label()+" (detrended)");
         plot->yAxis->setLabel(plot->yAxis->label()+" (detrended)");

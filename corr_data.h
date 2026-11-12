@@ -28,7 +28,6 @@ typedef struct Data{
     string beg_time;
     string end_time;
     map <string,double>value;
-    map <string,double>denominator;
     bool operator<(const Data &right)const {
         return sacla_tag == right.sacla_tag ? sr_tag < right.sr_tag : sacla_tag < right.sacla_tag;
     }
@@ -58,39 +57,50 @@ typedef struct Importance{
 class Corr_data
 {
 public:
-    Corr_data(int data_num,int f);
+    Corr_data(int data_num);
     ~Corr_data();
     void get_tag(string endtime);
     void drop_untagged();       // タグが決まらなかったショットを捨てる
     void get_tag(string begtime,string endtime);
+    struct TSig{string name;double weight;};   // 基準信号そのもの(DB から取る)
+    // 説明変数を追加する(基準信号と同じ名前のものは、相関を見る意味がないので追加しない)
     void add_signal(string signal){
+        if(signal==target_name_virtual())return;
+        for(const TSig &t : tsig)if(t.name==signal)return;
         Signal_param s = {signal,0,0,1,0,0,0,0};
         if(find(sig.begin(),sig.end(),s)==sig.end()){
             sig.push_back(s);
         }
     };
-    void add_signal_d(string signal){
-        Signal_param s = {signal,0,0,1,0,0,0,0};
-        if(find(sig_d.begin(),sig_d.end(),s)==sig_d.end()){
-            sig_d.push_back(s);
-        }
-    };
+    // ===== 基準信号(Target) =====
+    // 基準信号は複数にでき、それぞれに重みを付ける。sig[0] は、それらを合成した値を持つ仮想の信号(TARGET_NAME。DB からは取らない)で、
+    // MIC・Highlight・トレンドなど、これまで sig[0] を基準信号として使っていた処理は、そのままこの合成値を使う。
+    // sig[1..] は説明変数(Plot Signal リスト)。基準信号そのもの(tsig)は、相関ランキングには出ない。
+    //   合成: sum = Σ w_k·z_k      min = min_k |w_k|·(s_k·z_k − best_k)  (s_k=sign(w_k)、best_k は s_k·z_k の最大値。重み付きチェビシェフ)
+    //   z_k : 正規化した値。平均と標準偏差は Get 時点のもの(自動更新で変わらない)
+    enum Combine{COMBINE_SUM=0,COMBINE_MIN=1};
+    enum Normalize{NORM_AUTO=0,NORM_ZSCORE=1,NORM_NONE=2};   // AUTO: 基準信号が1つなら正規化しない(従来と同じ値)、2つ以上なら z スコア
+    struct Target{string name;double weight;};
+    static const char *target_name_virtual(){return "[Target]";}
+    // 基準信号のリストと合成の方法を設定する。変わったときは(データがあれば)合成値を計算し直し、true を返す
+    bool set_targets(const vector<Target> &t,int combine,int normalize);
+    int target_count(){return (int)tsig.size();}
+    const string &target_name(int k){return (k>=0 && k<(int)tsig.size()) ? tsig[k].name : empty_name;}
+    double target_weight(int k){return (k>=0 && k<(int)tsig.size()) ? tsig[k].weight : 0.0;}
+    string target_label();      // 合成値の表示名(基準信号が1つで重み1、正規化なしなら、その信号名そのもの)
     void db_get_sync_data();
     int data_size(){return size;};
     int sig_size(){return sig.size();};
     // 範囲外の番号でも落ちないようにする(空の名前を返す)
     const string &sig_name(int n){return (n>=0 && n<(int)sig.size()) ? sig[n].name : empty_name;};
-    const string &sig_d_name(int n){return (n>=0 && n<(int)sig_d.size()) ? sig_d[n].name : empty_name;};
     double value(const string &signame,int n){
         if(n<0 || n>=(int)data.size())return 0.0;       // ショット番号が範囲外
-        // Calc efficiency(dflg)は、基準信号を分母信号(sig_d の先頭)で割る。信号や分母が無ければ元の値を返す
-        if(dflg != 0 && !sig.empty() && !sig_d.empty() && signame==sig[0].name){
-            return data[n].value[signame]/data[n].denominator[sig_d[0].name]*100;
-        }else{
-            return data[n].value[signame];
+        if(signame==target_name_virtual()){             // 合成値は、まだ無いときに 0 を作って残さない
+            auto it = data[n].value.find(signame);
+            return it!=data[n].value.end() ? it->second : 0.0;
         }
+        return data[n].value[signame];
     };
-    double denominator(string signame,int n){return data[n].denominator[signame];};
     string begtime(int n){return data[n].beg_time;};
     string endtime(int n){return data[n].end_time;};
     int64_t sacla_tag(int n){return data[n].sacla_tag;};
@@ -125,7 +135,7 @@ public:
     long long tag_offset_sacla(){return off_sacla;};
     long long tag_offset_sr(){return off_sr;};
     // 取得の進み具合を知らせるコールバック(Get の進捗表示用)。progress(段階, 済んだ数, 全体の数)
-    //   段階 0: タグの決定(ショットごと)、1: 信号の値の取得(ショットごと)、2: 分母の信号の値の取得(ショットごと)
+    //   段階 0: タグの決定(ショットごと)、1: 信号の値の取得(ショットごと)
     void set_progress(std::function<void(int,int,int)> f){progress_cb = f;};
     int tag_count(){return found_shots;};      // 直近の get_tag で見つかったショット数(0 なら、DB から1件も取れなかった)
     unsigned data_version(){return ver;};   // データが変わるたびに増える(変化の検出用)
@@ -147,18 +157,27 @@ public:
     // Plot Signal リストの並び(上から順の信号名)を渡す。リストに無い信号は最後になる
     void update_list_order(const vector<string> &names);
     double importance(int n){return sig[n].importance;};
-    void set_flg(int f){dflg = f;DLOG<<dflg<<endl;};
     void outfile(string);
 private:
     static double mic_alpha(int n);
     static double mic_null95(int n);
     void calc_stats(int i,double *x,double *y,int n);
     int size;
-    vector <Signal_param> sig;
-    vector <Signal_param> sig_d;
+    vector <Signal_param> sig;      // sig[0] は合成した基準値(仮想)、sig[1..] は説明変数
+    vector <TSig> tsig;             // 基準信号そのもの(DB から取る)
+    int combine_mode = COMBINE_SUM;
+    int normalize_mode = NORM_AUTO;
+    bool tstats_valid = false;
+    vector<double> tmean,tstd,tbest;    // 基準信号ごとの、Get 時点の平均・標準偏差と、min 合成の best
+    vector<string> fetch_names();       // DB から取る信号名(基準信号 + 説明変数)
+    void drop_signal(const string &name);
+    void store_values(int n,DB_SIGNAL_STRUCT &siglist);
+    bool target_ready(int n);           // ショット n に、すべての基準信号の値があるか
+    int eff_norm();
+    void compute_target_stats();
+    void recompute_target();
     vector<Data> data;
     vector<int> rank;
-    int dflg;
     unsigned ver = 0;
     int found_shots = 0;
     std::function<void(int,int,int)> progress_cb;

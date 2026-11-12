@@ -330,13 +330,6 @@
              </widget>
             </item>
             <item>
-             <widget class="QCheckBox" name="checkBox_calc">
-              <property name="text">
-               <string>Calc efficiency</string>
-              </property>
-             </widget>
-            </item>
-            <item>
              <layout class="QHBoxLayout" name="horizontalLayout_hl">
               <item>
                <widget class="QCheckBox" name="checkBox_highlight">
@@ -554,7 +547,7 @@
             <item>
              <widget class="QRadioButton" name="radioButton_2">
               <property name="text">
-               <string>Denom Signal</string>
+               <string>Target Signal</string>
               </property>
              </widget>
             </item>

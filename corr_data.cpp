@@ -24,11 +24,12 @@ static void log_tag(long long evno,const Data &d,const char *note,long long off_
     cerr << endl;
 }
 
-Corr_data::Corr_data(int data_num,int f)
+Corr_data::Corr_data(int data_num)
 {
     size = data_num;
     data.resize(size);
-    dflg = f;
+    Signal_param s = {target_name_virtual(),0,0,1,0,0,0,0};     // sig[0]: 基準信号の合成値(仮想)
+    sig.push_back(s);
 }
 
 Corr_data::~Corr_data(){
@@ -200,92 +201,162 @@ void Corr_data::get_tag(string begtime,string endtime)
     sort(data.begin(),data.end());
 }
 
+// ===== 基準信号(Target) =====
+vector<string> Corr_data::fetch_names()
+{
+    vector<string> v;
+    for(const TSig &t : tsig)v.push_back(t.name);
+    for(size_t i=1;i<sig.size();i++){
+        if(find_if(tsig.begin(),tsig.end(),[&](const TSig &t){return t.name==sig[i].name;})==tsig.end())v.push_back(sig[i].name);
+    }
+    return v;
+}
+
+// DB に登録できなかった信号を捨てる
+void Corr_data::drop_signal(const string &name)
+{
+    for(size_t i=1;i<sig.size();i++)if(sig[i].name==name){sig.erase(sig.begin()+i);break;}
+    for(size_t i=0;i<tsig.size();i++)if(tsig[i].name==name){tsig.erase(tsig.begin()+i);tstats_valid = false;break;}
+}
+
+// db_get_data_multi の結果から、ショット n の時間窓に対応するイベントの値を data[n].value に入れる
+void Corr_data::store_values(int n,DB_SIGNAL_STRUCT &siglist)
+{
+    for(int j=0;j<siglist.num_signal;j++){
+        DB_SIGNAL_DATA *tData = &siglist.signal_list[j];
+        const string name = siglist.signal_list[j].sig_name;
+        Db_f_data *fdata = (Db_f_data*)tData->data;
+        for(int m=0;m<tData->num_data;m++){
+            if(fdata[m].evno == eff_sacla(n) || fdata[m].evno == eff_sr(n)){
+                if((fdata[m].fdata>1e8||name.find("sr_safety")!=std::string::npos)&&name.find("efficiency")==std::string::npos){
+                    data[n].value[name] = fdata[m].fdata*1.60219e-10;
+                }else{
+                    data[n].value[name] = fdata[m].fdata;
+                }
+            }
+        }
+    }
+}
+
+bool Corr_data::target_ready(int n)
+{
+    if(tsig.empty())return false;
+    for(const TSig &t : tsig)if(data[n].value.count(t.name)==0)return false;
+    return true;
+}
+
+int Corr_data::eff_norm()
+{
+    if(normalize_mode==NORM_AUTO)return tsig.size()==1 ? NORM_NONE : NORM_ZSCORE;
+    return normalize_mode;
+}
+
+string Corr_data::target_label()
+{
+    if(tsig.empty())return "(no target)";
+    if(tsig.size()==1 && eff_norm()==NORM_NONE && tsig[0].weight==1.0)return tsig[0].name;
+    if(tsig.size()==1 && eff_norm()==NORM_NONE)return boost::str(boost::format("%g x %s") % tsig[0].weight % tsig[0].name);
+    return string("Target (") + (combine_mode==COMBINE_MIN ? "min" : "sum") + (eff_norm()==NORM_ZSCORE ? " of z-scores)" : ")");
+}
+
+// Get 時点の平均・標準偏差(基準信号ごと)と、min 合成の best(s_k·z_k の最大値)を求めて固定する
+void Corr_data::compute_target_stats()
+{
+    const int nt = (int)tsig.size();
+    tmean.assign(nt,0.0);  tstd.assign(nt,1.0);  tbest.assign(nt,0.0);
+    vector<int> rows;
+    for(int n=0;n<(int)data.size();n++)if(target_ready(n))rows.push_back(n);
+    if(rows.empty()){tstats_valid = false;return;}
+    for(int k=0;k<nt;k++){
+        double s = 0;
+        for(int n : rows)s += data[n].value[tsig[k].name];
+        double mean = s/rows.size(),var = 0;
+        for(int n : rows){double d = data[n].value[tsig[k].name]-mean;var += d*d;}
+        double sd = sqrt(var/rows.size());
+        tmean[k] = mean;
+        tstd[k] = sd>0 ? sd : 1.0;
+        double best = -1e300;
+        for(int n : rows){
+            double z = eff_norm()==NORM_ZSCORE ? (data[n].value[tsig[k].name]-mean)/tstd[k] : data[n].value[tsig[k].name];
+            double u = (tsig[k].weight<0 ? -1.0 : 1.0)*z;
+            if(u>best)best = u;
+        }
+        tbest[k] = best;
+    }
+    tstats_valid = true;
+}
+
+// すべてのショットの合成値(sig[0]=TARGET の値)を計算し直す
+void Corr_data::recompute_target()
+{
+    const int nt = (int)tsig.size();
+    if(nt==0)return;
+    if(!tstats_valid)compute_target_stats();
+    if(!tstats_valid)return;
+    const bool zs = eff_norm()==NORM_ZSCORE;
+    const bool use_min = combine_mode==COMBINE_MIN && nt>1;
+    const string tn = target_name_virtual();
+    for(int n=0;n<(int)data.size();n++){
+        if(!target_ready(n)){data[n].value.erase(tn);continue;}
+        double sum = 0,mn = 1e300;
+        for(int k=0;k<nt;k++){
+            double w = tsig[k].weight;
+            if(w==0)continue;
+            double x = data[n].value[tsig[k].name];
+            double z = zs ? (x-tmean[k])/tstd[k] : x;
+            sum += w*z;
+            double u = (w<0 ? -1.0 : 1.0)*z;
+            mn = min(mn,fabs(w)*(u-tbest[k]));
+        }
+        data[n].value[tn] = use_min ? (mn<1e299 ? mn : 0.0) : sum;
+    }
+    ver++;
+}
+
+bool Corr_data::set_targets(const vector<Target> &t,int combine,int normalize)
+{
+    bool changed = (combine!=combine_mode || normalize!=normalize_mode || t.size()!=tsig.size());
+    for(size_t k=0;!changed && k<t.size();k++)changed = (t[k].name!=tsig[k].name || t[k].weight!=tsig[k].weight);
+    if(!changed)return false;
+    combine_mode = combine;
+    normalize_mode = normalize;
+    tsig.clear();
+    for(const Target &x : t)tsig.push_back({x.name,x.weight});
+    for(size_t i=sig.size();i-->1;){        // 基準信号になった信号は、説明変数から外す
+        for(const TSig &x : tsig)if(x.name==sig[i].name){sig.erase(sig.begin()+i);break;}
+    }
+    tstats_valid = false;
+    recompute_target();         // 値がまだ無ければ何もしない(Get / 自動更新で値が入ってから計算する)
+    return true;
+}
+
 void Corr_data::db_get_sync_data()
 {
     int status;
     DB_SIGNAL_STRUCT siglist;
-    DB_SIGNAL_DATA* tData;
-    Db_f_data *fdata;
 
+    const vector<string> names = fetch_names();
     status = db_init_signal_list(&siglist);
     if(status == 0){
-        for(auto itr = sig.begin();itr != sig.end(); ++itr){
-            status = db_add_signal_list(&siglist,itr->name.c_str());
+        for(const string &name : names){
+            status = db_add_signal_list(&siglist,name.c_str());
             if(status != 0){
-                printf("err db_add_signal_list :: %s\n",itr->name.c_str());
-                sig.erase(itr);
-                itr--;
+                printf("err db_add_signal_list :: %s\n",name.c_str());
+                drop_signal(name);
             }
         }
     }
     DLOG<<"num_siglist  =  "<<siglist.num_signal<<endl;
     for(int n=0;n<size;n++){
         status = db_get_data_multi(&siglist,data[n].beg_time.c_str(),data[n].end_time.c_str(),1,0);
-        if(status == 0){
-            for(int i=0;i<(int)sig.size();i++){
-                for(int j=0;j<siglist.num_signal;j++){
-                    if(sig[i].name.compare(siglist.signal_list[j].sig_name)==0){
-                        tData = &siglist.signal_list[j];
-                        fdata = (Db_f_data*)tData->data;
-                        for(int m=0;m<tData->num_data;m++){
-                            if(fdata[m].evno == eff_sacla(n)||
-                                    fdata[m].evno == eff_sr(n)){
-                                        if((fdata[m].fdata>1e8||sig[i].name.find("sr_safety")!=std::string::npos)&&sig[i].name.find("efficiency")==std::string::npos){
-
-                                    data[n].value[sig[i].name] = fdata[m].fdata*1.60219e-10;
-                                }else{
-                                    data[n].value[sig[i].name] = fdata[m].fdata;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        if(status == 0)store_values(n,siglist);
         report(1,n+1,size);
     }
     db_release_signal_list_all(&siglist);
     sort(data.begin(),data.end());
 
-    status = db_init_signal_list(&siglist);
-    if(status == 0){
-        for(auto itr = sig_d.begin();itr != sig_d.end(); ++itr){
-            status = db_add_signal_list(&siglist,itr->name.c_str());
-            if(status != 0){
-                printf("err db_add_signal_list :: %s\n",itr->name.c_str());
-                sig_d.erase(itr);
-                itr--;
-            }
-        }
-    }
-    DLOG<<"num_siglist  =  "<<siglist.num_signal<<endl;
-    for(int n=0;n<size;n++){
-        status = db_get_data_multi(&siglist,data[n].beg_time.c_str(),data[n].end_time.c_str(),1,0);
-        if(status == 0){
-            for(int i=0;i<(int)sig_d.size();i++){
-                for(int j=0;j<siglist.num_signal;j++){
-                    if(sig_d[i].name.compare(siglist.signal_list[j].sig_name)==0){
-                        tData = &siglist.signal_list[j];
-                        fdata = (Db_f_data*)tData->data;
-                        for(int m=0;m<tData->num_data;m++){
-                            if(fdata[m].evno == eff_sacla(n)||
-                                    fdata[m].evno == eff_sr(n)){
-                                    if((fdata[m].fdata>1e8||sig_d[i].name.find("sr_safety")!=std::string::npos)&&sig_d[i].name.find("efficiency")==std::string::npos){
-
-                                    data[n].denominator[sig_d[i].name] = fdata[m].fdata*1.60219e-10;
-                                }else{
-                                    data[n].denominator[sig_d[i].name] = fdata[m].fdata;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        report(2,n+1,size);
-    }
-    db_release_signal_list_all(&siglist);
-
+    tstats_valid = false;       // Get 時点の平均・標準偏差を、ここで固定する
+    recompute_target();
 }
 
 #include <random>
@@ -946,114 +1017,46 @@ void Corr_data::add_db_get_sync_data()
 {
     int status;
     DB_SIGNAL_STRUCT siglist;
-    DB_SIGNAL_DATA* tData;
-    Db_f_data *fdata;
 
-    // 値(value/denominator)の個数が増えたかでデータ更新を検出する
+    // 値(value)の個数が増えたかでデータ更新を検出する
     auto stored = [this]()->size_t{
         size_t t = 0;
-        for(size_t k=0;k<data.size();k++)t += data[k].value.size()+data[k].denominator.size();
+        for(size_t k=0;k<data.size();k++)t += data[k].value.size();
         return t;
     };
     size_t stored_before = stored();
 
     // 値が足りないショットを、DB APIを呼ばずに先に調べる(足りなければ何も呼ばない)
-    vector<int> need_sig,need_den;
+    const vector<string> names = fetch_names();
+    vector<int> need_sig;
     for(int n=0;n<size;n++){
         bool miss = false;
-        for(size_t i=0;i<sig.size() && !miss;i++)miss = (data[n].value.count(sig[i].name)==0);
+        for(size_t i=0;i<names.size() && !miss;i++)miss = (data[n].value.count(names[i])==0);
         if(miss)need_sig.push_back(n);
-        miss = false;
-        for(size_t i=0;i<sig_d.size() && !miss;i++)miss = (data[n].denominator.count(sig_d[i].name)==0);
-        if(miss)need_den.push_back(n);
     }
-    if(need_sig.empty() && need_den.empty())return;
 
     for(size_t q=0;q<need_sig.size();q++){
         int n = need_sig[q];
         status = db_init_signal_list(&siglist);
         if(status == 0){
-            for(auto itr = sig.begin();itr != sig.end(); ++itr){
-                if(data[n].value.count(itr->name)==0){
-                    status = db_add_signal_list(&siglist,itr->name.c_str());
+            for(const string &name : names){
+                if(data[n].value.count(name)==0){
+                    status = db_add_signal_list(&siglist,name.c_str());
                     if(status != 0){
-                        printf("err db_add_signal_list :: %s\n",itr->name.c_str());
-                        sig.erase(itr);
-                        itr--;
+                        printf("err db_add_signal_list :: %s\n",name.c_str());
+                        drop_signal(name);
                     }
                 }
             }
         }
         if(siglist.num_signal>0){
             status = db_get_data_multi(&siglist,data[n].beg_time.c_str(),data[n].end_time.c_str(),1,0);
-            if(status == 0){
-                for(int i=0;i<(int)sig.size();i++){
-                    for(int j=0;j<siglist.num_signal;j++){
-                        if(sig[i].name.compare(siglist.signal_list[j].sig_name)==0){
-                            tData = &siglist.signal_list[j];
-                            fdata = (Db_f_data*)tData->data;
-                            for(int m=0;m<tData->num_data;m++){
-                                if(fdata[m].evno == eff_sacla(n)||
-                                        fdata[m].evno == eff_sr(n)){
-                                        if((fdata[m].fdata>1e8||sig[i].name.find("sr_safety")!=std::string::npos)&&sig[i].name.find("efficiency")==std::string::npos){
-
-                                        data[n].value[sig[i].name] = fdata[m].fdata*1.60219e-10;
-                                    }else{
-                                        data[n].value[sig[i].name] = fdata[m].fdata;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
+            if(status == 0)store_values(n,siglist);
             db_release_signal_list_all(&siglist);
         }
     }
-
-    for(size_t q=0;q<need_den.size();q++){
-        int n = need_den[q];
-        status = db_init_signal_list(&siglist);
-        if(status == 0){
-            for(auto itr = sig_d.begin();itr != sig_d.end(); ++itr){
-                if(data[n].denominator.count(itr->name)==0){
-                    status = db_add_signal_list(&siglist,itr->name.c_str());
-                    if(status != 0){
-                        printf("err db_add_signal_list :: %s\n",itr->name.c_str());
-                        sig_d.erase(itr);
-                        itr--;
-                    }
-                }
-            }
-        }
-        if(siglist.num_signal>0){
-            status = db_get_data_multi(&siglist,data[n].beg_time.c_str(),data[n].end_time.c_str(),1,0);
-            if(status == 0){
-                for(int i=0;i<(int)sig_d.size();i++){
-                    for(int j=0;j<siglist.num_signal;j++){
-                        if(sig_d[i].name.compare(siglist.signal_list[j].sig_name)==0){
-                            tData = &siglist.signal_list[j];
-                            fdata = (Db_f_data*)tData->data;
-                            for(int m=0;m<tData->num_data;m++){
-                                if(fdata[m].evno == eff_sacla(n)||
-                                        fdata[m].evno == eff_sr(n)){
-                                    if((fdata[m].fdata>1e8||sig_d[i].name.find("sr_safety")!=std::string::npos)&&sig_d[i].name.find("efficiency")==std::string::npos){
-                                        data[n].denominator[sig_d[i].name] = fdata[m].fdata*1.60219e-10;
-                                    }else{
-                                        data[n].denominator[sig_d[i].name] = fdata[m].fdata;
-
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            db_release_signal_list_all(&siglist);
-        }
-    }
+    // 新しく値が入ったショットの合成値を計算する(平均・標準偏差は Get 時点のまま)
+    if(!need_sig.empty() || !tstats_valid)recompute_target();
     if(stored()!=stored_before)ver++;
 }
 #include <QFile>
@@ -1073,14 +1076,11 @@ void Corr_data::outfile(string fname)
         out << "sr_tag"<<",";
         out << "beg_time"<<",";
         out << "end_time"<<",";
-        for(int j=0;j<(int)sig_d.size();j++){
-            out<<"("<<sig[0].name.c_str()<<")"<<"/"<<"("<<sig_d[j].name.c_str()<<")"<<"*100"<<",";
-        }
         for(int j=0;j<(int)sig.size();j++){
             out << sig[j].name.c_str()<<",";
         }
-        for(int j=0;j<(int)sig_d.size();j++){
-            out << sig_d[j].name.c_str()<<",";
+        for(int j=0;j<(int)tsig.size();j++){
+            out << tsig[j].name.c_str()<<",";
         }
         out << Qt::endl;
         for(int i=0;i<size;i++){
@@ -1091,14 +1091,11 @@ void Corr_data::outfile(string fname)
             replace(et.begin(),et.end(),' ','-');
             out << bt.c_str()<<",";
             out << et.c_str()<<",";
-            for(int j=0;j<(int)sig_d.size();j++){
-                out<<data[i].value[sig[0].name]/data[i].denominator[sig_d[j].name]*100<<",";
-            }
             for(int j=0;j<(int)sig.size();j++){
                 out << data[i].value[sig[j].name]<<",";
             }
-            for(int j=0;j<(int)sig_d.size();j++){
-                out << data[i].denominator[sig_d[j].name]<<",";
+            for(int j=0;j<(int)tsig.size();j++){
+                out << data[i].value[tsig[j].name]<<",";
             }
             out << Qt::endl;
         }

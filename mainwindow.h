@@ -42,7 +42,6 @@ private slots:
     void plot_trend(QCustomPlot *plot);
     void on_listWidget_2_doubleClicked(const QModelIndex &index);
 
-    void on_checkBox_calc_stateChanged(int arg1);
     bool save();
     bool saveAs();
 
@@ -80,6 +79,15 @@ private slots:
     void rank_mode_changed();       // File メニューの Rank by ... (MIC / Importance / Gap of Means)
 
 private:
+    // 基準信号(Target Signal)
+    bool load_targets();
+    void save_targets();
+    void add_target_item(const QString &name,double w);
+    void load_target_settings();
+    bool sync_targets();
+    void targets_changed();
+    int target_combine = Corr_data::COMBINE_SUM;
+    int target_normalize = Corr_data::NORM_AUTO;
     // 子パネル(Trend Panel)
     QWidget *trend_win = nullptr;
     QVBoxLayout *trend_lay = nullptr;
