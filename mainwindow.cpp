@@ -37,6 +37,8 @@ static const char *CSV_FILE = "/home_2023/xfel/xfelopr/users/kenichi/dvlp/corr_d
 // 起動時の既定は、theme.txt、無ければ settings.ini の [Theme] name、それも無ければ dark:
 //   dark          : 暗い背景(青緑)           dark-contrast : 真っ黒な背景 + 明るい原色(いちばん見やすい)
 //   dark-amber    : 暗い暖色の背景(琥珀色)   dark-navy     : 暗い紺色の背景(青)
+//   dark-pink     : 別プロジェクト trend の「Dark Pink」と同じ配色(背景 #2a0f1e、文字 #f3d3e4、ホットピンク)
+//   dark-pink-deep / -rich / -soft : dark-pink のピンクの濃さ違い(deep=黒に近い、rich=濃いピンク、soft=明るいピンク)
 //   classic       : 以前の、白い背景のグラフ
 // さらに [Colors](load_colors)で、強調の色と最新の点の色を個別に上書きできる(classic のときだけ)。
 struct Theme{
@@ -53,7 +55,9 @@ struct Theme{
 };
 // メニューに出すテーマ(名前, 表示名)
 static const QList<QPair<QString,QString>> THEME_LIST = {
-    {"dark","Dark (Teal)"},{"dark-contrast","Dark High Contrast"},{"dark-amber","Dark Amber"},{"dark-navy","Dark Navy"},{"classic","Classic (Light)"}};
+    {"dark","Dark (Teal)"},{"dark-contrast","Dark High Contrast"},{"dark-amber","Dark Amber"},{"dark-navy","Dark Navy"},
+    {"dark-pink-deep","Dark Pink (Deep)"},{"dark-pink","Dark Pink"},{"dark-pink-rich","Dark Pink (Rich)"},{"dark-pink-soft","Dark Pink (Soft)"},
+    {"classic","Classic (Light)"}};
 static QString g_theme_name = "dark";
 static Theme T;
 
@@ -121,6 +125,24 @@ static void set_theme(QString name)
         MAIN_COLOR = QColor("#4DA3FF");
         LATEST1_COLOR = QColor("#FF5A5F");  LATEST2_COLOR = QColor("#FFA94D");  LATEST3_COLOR = QColor("#C084FC");
         CROSS_COLOR = QColor("#FFFFFF");
+    }else if(name.startsWith("dark-pink")){
+        // trend の Dark Pink(背景 #2a0f1e、文字 #f3d3e4、強調 hotpink、平均 #ffe0f0)を基準に、背景のピンクの濃さを変える
+        //   deep: 黒に近い赤紫 / (標準) / rich: 濃いピンク / soft: 明るいピンク
+        const char *np = "#D9A5C0";
+        if(name=="dark-pink-deep"){
+            base("#12060D","#1b0a13","#40182e","#f3d3e4","#b88aa3","#FF3D9A","#33152A","#6a2f50");  np = "#C78AAE";
+        }else if(name=="dark-pink-rich"){
+            base("#2b0f21","#3f1530","#7a3a5c","#fbe3ee","#d6a9c2","#FF7DC0","#5e2a49","#a05580");  np = "#E8BCD2";
+        }else if(name=="dark-pink-soft"){
+            base("#40172f","#5a2444","#8f4a73","#fff0f6","#e6bdd3","#FFA3D1","#7a3a5f","#c27aa0");  np = "#F3D3E4";
+        }else{      // dark-pink: trend と同じ
+            base("#210C18","#2a0f1e","#5a2644","#f3d3e4","#c79bb3","#FF69B4","#4f2340","#7a3a5c");
+        }
+        T.normal_point = QColor(np);  T.grad_end = QColor("#8BE9FD");
+        T.fill_alpha = 80;
+        MAIN_COLOR = T.accent;
+        LATEST1_COLOR = QColor("#FFF176");  LATEST2_COLOR = QColor("#FFB74D");  LATEST3_COLOR = QColor("#7DF9FF");
+        CROSS_COLOR = QColor("#ffe0f0");
     }else{      // dark (Teal)
         base("#0F1216","#171B22","#262C36","#E6EAF0","#8A94A6","#2EC4B6","#232A33","#3A4350");
         T.normal_point = QColor("#8190A5");  T.grad_end = QColor("#4D9BFF");
@@ -845,7 +867,7 @@ void MainWindow::load_theme()
         bool ok = false;
         for(const auto &t : THEME_LIST)if(t.first==name)ok = true;
         if(!ok){
-            cerr << "WARNING: settings.ini Theme/name must be dark, dark-contrast, dark-amber, dark-navy or classic; using dark" << endl;
+            cerr << "WARNING: settings.ini Theme/name must be dark, dark-contrast, dark-amber, dark-navy, dark-pink(-deep/-rich/-soft) or classic; using dark" << endl;
             name = "dark";
         }
     }
