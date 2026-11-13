@@ -148,9 +148,9 @@ public:
     // 散布図の並び順: MIC順 / 重要度順 / 閾値で分けた2群の平均の差順 / Plot Signal リストの順
     enum RankMode{RANK_MIC=0,RANK_IMPORTANCE=1,RANK_GAP=2,RANK_LIST=3};
     void set_rank_mode(int m){rank_mode = m;imp_valid = false;gap_valid = false;};
-    // MIC(と rho / p値)の計算は重いので、並び順が MIC か Importance のときだけ行う(Gap / List のときは省く)。
+    // MIC(と rho / p値)の計算は重いので、並び順が MIC のときだけ行う(Importance / Gap / List のときは省く)。
     // Importance ダイアログなど、MIC が必要な処理では set_mic_force(true) で一時的に計算させる
-    bool mic_enabled(){return rank_mode==RANK_MIC || rank_mode==RANK_IMPORTANCE || mic_force;}
+    bool mic_enabled(){return rank_mode==RANK_MIC || mic_force;}
     void set_mic_force(bool f){mic_force = f;}
     bool rank_importance(){return rank_mode==RANK_IMPORTANCE && imp_valid;};
     bool rank_gap(){return rank_mode==RANK_GAP && gap_valid;};

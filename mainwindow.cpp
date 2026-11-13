@@ -1512,7 +1512,7 @@ void MainWindow::set_info_text(QCustomPlot *plot,int n,const QString &best,const
     if(corrdata->rank_gap()){
         impLine = QString("\ngap : %1 sd").arg(corrdata->gap(n),0,'f',2);
     }
-    if(!corrdata->mic_enabled()){       // Gap / List 順のときは MIC を計算していないので、mic の行は出さない
+    if(!corrdata->mic_enabled()){       // MIC 順以外のときは MIC を計算していないので、mic の行は出さない
         QString s = impLine.mid(1);
         if(!best.isEmpty())s += (s.isEmpty() ? "" : "\n") + best;
         b.text->setText(s);

@@ -579,7 +579,7 @@ void Corr_data::update_gap(bool use_th,double th,double hl_th,int beg,int end)
         rows.push_back(i);
     }
     int n = (int)rows.size();
-    if(n < 4)return;        // ショット不足: MIC順のまま
+    if(n < 4)return;        // ショット不足: 重要度は付けない(MIC は計算していないので、リストの順のまま)
 
     // 閾値で2群に分ける(判定は Detrend 前の元の値で行う。散布図の縦線と同じ)
     vector<char> hi(n);
@@ -625,7 +625,7 @@ void Corr_data::update_importance(bool use_th,double th,int beg,int end)
     double r2 = 0;
     int nrows = 0;
     for(size_t i=0;i<sig.size();i++)sig[i].importance = 0;
-    if(!calc_importance(use_th,th,imp,r2,nrows,beg,end))return;   // ショット不足: MIC順のまま
+    if(!calc_importance(use_th,th,imp,r2,nrows,beg,end))return;   // ショット不足: 重要度は付けない(MIC は計算していないので、リストの順のまま)
     for(size_t k=0;k<imp.size();k++){
         for(size_t i=1;i<sig.size();i++){
             if(sig[i].name==imp[k].name)sig[i].importance = imp[k].importance;
@@ -702,7 +702,7 @@ void Corr_data::calc_mic_rows(const vector<int> &rows)
     if(sig.empty())return;
     set_self_stats();
     int n = (int)rows.size();
-    if(!mic_enabled()){         // 並び順が MIC / Importance 以外のときは、重い MIC の計算をしない
+    if(!mic_enabled()){         // 並び順が MIC 以外のときは、重い MIC の計算をしない
         for(int i=1;i<(int)sig.size();i++){
             sig[i].coefficient = 0;
             sig[i].rho = 0;
