@@ -1512,6 +1512,14 @@ void MainWindow::set_info_text(QCustomPlot *plot,int n,const QString &best,const
     if(corrdata->rank_gap()){
         impLine = QString("\ngap : %1 sd").arg(corrdata->gap(n),0,'f',2);
     }
+    if(!corrdata->mic_enabled()){       // Gap / List 順のときは MIC を計算していないので、mic の行は出さない
+        QString s = impLine.mid(1);
+        if(!best.isEmpty())s += (s.isEmpty() ? "" : "\n") + best;
+        b.text->setText(s);
+        b.text->setVisible(!s.isEmpty());
+        b.text->setColor(T.text);
+        return;
+    }
     if(!stats_act->isChecked()){
         b.text->setText(QString("mic : %1").arg(mic,0,'f',3) + impLine);
         b.text->setColor(T.text);
@@ -2976,12 +2984,14 @@ void MainWindow::show_importance()
     }
     bool useTh = ui->checkBox_th->checkState()==Qt::Checked;
     corrdata->set_detrend(detrend_act->isChecked());
-    // 表のMICは現在の条件で計算し直したものにする
+    // 表のMICは現在の条件で計算し直したものにする(並び順が MIC / Importance 以外でも、ここでは計算する)
+    corrdata->set_mic_force(true);
     if(useTh){
         corrdata->calc_mic(ui->V_threshold->text().toDouble());
     }else{
         corrdata->calc_mic();
     }
+    corrdata->set_mic_force(false);
 
     vector<Importance> imp;
     double r2 = 0;

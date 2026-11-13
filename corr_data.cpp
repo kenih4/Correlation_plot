@@ -702,6 +702,15 @@ void Corr_data::calc_mic_rows(const vector<int> &rows)
     if(sig.empty())return;
     set_self_stats();
     int n = (int)rows.size();
+    if(!mic_enabled()){         // 並び順が MIC / Importance 以外のときは、重い MIC の計算をしない
+        for(int i=1;i<(int)sig.size();i++){
+            sig[i].coefficient = 0;
+            sig[i].rho = 0;
+            sig[i].pval = 1;
+            sig[i].mic_null = 0;
+        }
+        return;
+    }
     if(n<2){
         for(int i=1;i<(int)sig.size();i++){
             sig[i].coefficient = 0;
