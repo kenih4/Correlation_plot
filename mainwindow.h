@@ -12,6 +12,7 @@
 #include <QVBoxLayout>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QSpinBox>
 #include "corr_data.h"
 #include "qcustomplot.h"
 
@@ -97,6 +98,23 @@ private:
     QVector<double> heat_cache[2];
     QDateTime heat_cache_time[2];
     int heat_cache_shots[2] = {0,0};
+    // 密度ヒートマップ / 信号×ショット ヒートマップ(子パネル)
+    void open_density_panel();
+    void update_density_panel();
+    void open_shot_heatmap();
+    void update_shot_heatmap();
+    QWidget *den_win = nullptr;
+    QScrollArea *den_scroll = nullptr;
+    QGridLayout *den_grid = nullptr;
+    QSpinBox *den_bins = nullptr;
+    QVector<QCustomPlot*> den_plots;
+    QStringList den_names;
+    QWidget *shot_win = nullptr;
+    QCustomPlot *shot_plot = nullptr;
+    QLabel *shot_info = nullptr;
+    QCPColorScale *shot_scale = nullptr;
+    QStringList shot_keys,shot_names;
+    std::vector<double> shot_z;
     // 基準信号(Target Signal)
     bool load_targets();
     void save_targets();

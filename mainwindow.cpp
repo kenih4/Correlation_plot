@@ -164,6 +164,22 @@ static QVector<double> moving_average(const QVector<double> &y,int w)
     }
     return out;
 }
+// ヒートマップの色。diverging: 負=青、0=背景、正=赤(Spearman、標準化した値)。そうでなければ 背景 → 強調色(MIC、密度)
+static QCPColorGradient heat_gradient(bool diverging)
+{
+    QCPColorGradient g;
+    g.clearColorStops();
+    const QColor mid = T.dark ? T.plot_bg : QColor(Qt::white);
+    if(diverging){
+        g.setColorStopAt(0.0,T.dark ? QColor("#4D9BFF") : QColor("#1f77b4"));
+        g.setColorStopAt(0.5,mid);
+        g.setColorStopAt(1.0,T.dark ? QColor("#FF5A5F") : QColor("#d62728"));
+    }else{
+        g.setColorStopAt(0.0,mid);
+        g.setColorStopAt(1.0,MAIN_COLOR);
+    }
+    return g;
+}
 static QPen ma_pen(){QColor col = T.text;col.setAlpha(210);return QPen(col,2);}
 
 static QString ini_string(QSettings &st,const QString &key,const QString &def);     // 定義は後ろ(settings.ini の値を文字列で読む)
@@ -639,20 +655,8 @@ void MainWindow::draw_heatmap()
         heat_scale->setType(QCPAxis::atRight);
     }
     map->setColorScale(heat_scale);
-    QCPColorGradient g;
-    g.clearColorStops();
-    const QColor mid = T.dark ? T.plot_bg : QColor(Qt::white);
-    if(!heat_is_mic){
-        map->setDataRange(QCPRange(-1,1));
-        g.setColorStopAt(0.0,T.dark ? QColor("#4D9BFF") : QColor("#1f77b4"));
-        g.setColorStopAt(0.5,mid);
-        g.setColorStopAt(1.0,T.dark ? QColor("#FF5A5F") : QColor("#d62728"));
-    }else{
-        map->setDataRange(QCPRange(0,1));
-        g.setColorStopAt(0.0,mid);
-        g.setColorStopAt(1.0,MAIN_COLOR);
-    }
-    map->setGradient(g);
+    map->setDataRange(heat_is_mic ? QCPRange(0,1) : QCPRange(-1,1));
+    map->setGradient(heat_gradient(!heat_is_mic));
     heat_scale->axis()->setLabel(heat_is_mic ? "MIC" : "Spearman");
     heat_scale->axis()->setLabelColor(T.text);
     heat_scale->axis()->setTickLabelColor(T.muted);
@@ -690,6 +694,222 @@ void MainWindow::draw_heatmap()
         }
     }
     heat_plot->replot();
+}
+
+// ===== 密度ヒートマップ(子パネル) =====
+// 説明変数ごとに1枚: 横軸=その信号、縦軸=合成した基準値。点の密集度(各マスに入るショット数)を色で表す。
+// 最新のショットは輪で示す。全ショットを使う。データが更新されるたびに(パネルが開いていれば)描き直す
+void MainWindow::open_density_panel()
+{
+    if(!den_win){
+        den_win = new QWidget(this,Qt::Window);
+        den_win->setWindowTitle("Density Heatmap");
+        QVBoxLayout *top = new QVBoxLayout(den_win);
+        top->setContentsMargins(6,6,6,6);
+        QHBoxLayout *bar = new QHBoxLayout;
+        bar->addWidget(new QLabel("Bins:",den_win));
+        den_bins = new QSpinBox(den_win);
+        den_bins->setRange(8,100);
+        den_bins->setValue(30);
+        bar->addWidget(den_bins);
+        QLabel *note = new QLabel("x = each signal, y = combined target.  Color = number of shots in the cell.  Ring = latest shot.",den_win);
+        bar->addWidget(note,1);
+        top->addLayout(bar);
+        den_scroll = new QScrollArea(den_win);
+        den_scroll->setWidgetResizable(true);
+        den_scroll->setFrameShape(QFrame::NoFrame);
+        QWidget *inner = new QWidget;
+        den_grid = new QGridLayout(inner);
+        den_grid->setContentsMargins(0,0,0,0);
+        den_scroll->setWidget(inner);
+        top->addWidget(den_scroll,1);
+        connect(den_bins,QOverload<int>::of(&QSpinBox::valueChanged),this,[this](int){update_density_panel();});
+        den_win->resize(1100,760);
+    }
+    den_win->show();
+    den_win->raise();
+    den_win->activateWindow();
+    update_density_panel();
+}
+
+void MainWindow::update_density_panel()
+{
+    if(!den_win || !den_win->isVisible() || !corrdata)return;
+    const int n = corrdata->data_size(),ns = corrdata->sig_size();
+    if(n<2 || ns<2)return;
+    QStringList names;
+    for(int i=1;i<ns;i++)names << QString::fromStdString(corrdata->sig_name(i));
+    if(names!=den_names){
+        for(QCustomPlot *p : den_plots){den_grid->removeWidget(p);p->deleteLater();}
+        den_plots.clear();
+        den_names = names;
+        for(int k=0;k<names.size();k++){
+            QCustomPlot *p = new QCustomPlot;
+            p->setMinimumSize(340,260);
+            p->setInteractions(QCP::Interaction(0));
+            den_grid->addWidget(p,k/3,k%3);
+            den_plots.append(p);
+        }
+    }
+    const int B = den_bins->value();
+    const string y_name = corrdata->sig_name(0);
+    QVector<double> y(n);
+    for(int i=0;i<n;i++)y[i] = corrdata->value(y_name,i);
+    auto finite_range = [](const QVector<double> &v,double &lo,double &hi){
+        lo = 1e300;hi = -1e300;
+        for(double d : v)if(std::isfinite(d)){lo = std::min(lo,d);hi = std::max(hi,d);}
+        if(lo>hi){lo = 0;hi = 1;}
+        if(hi-lo<1e-12){lo -= 0.5;hi += 0.5;}
+    };
+    double ylo,yhi;
+    finite_range(y,ylo,yhi);
+    for(int k=0;k<names.size();k++){
+        QCustomPlot *p = den_plots[k];
+        QVector<double> x(n);
+        for(int i=0;i<n;i++)x[i] = corrdata->value(names[k].toStdString(),i);
+        double xlo,xhi;
+        finite_range(x,xlo,xhi);
+        style_plot(p);
+        p->clearPlottables();
+        QCPColorMap *map = new QCPColorMap(p->xAxis,p->yAxis);
+        map->data()->setSize(B,B);
+        map->data()->setRange(QCPRange(xlo,xhi),QCPRange(ylo,yhi));
+        map->data()->fill(0);
+        double mx = 0;
+        for(int i=0;i<n;i++){
+            if(!std::isfinite(x[i]) || !std::isfinite(y[i]))continue;
+            int ix,iy;
+            map->data()->coordToCell(x[i],y[i],&ix,&iy);
+            ix = qBound(0,ix,B-1);  iy = qBound(0,iy,B-1);
+            double v = map->data()->cell(ix,iy) + 1;
+            map->data()->setCell(ix,iy,v);
+            mx = std::max(mx,v);
+        }
+        map->setInterpolate(false);
+        map->setGradient(heat_gradient(false));
+        map->setDataRange(QCPRange(0,std::max(1.0,mx)));
+        p->xAxis->setRange(xlo,xhi);
+        p->yAxis->setRange(ylo,yhi);
+        p->xAxis->setLabel(names[k]);
+        p->xAxis->setLabelFont(QFont(font().family(),7));
+        p->xAxis->setTickLabelFont(QFont(font().family(),7));
+        p->yAxis->setTickLabelFont(QFont(font().family(),7));
+        p->yAxis->setLabel(k%3==0 ? QString::fromStdString(corrdata->target_label()) : QString());
+        // 最新のショット
+        QCPGraph *g = p->addGraph();
+        g->setLineStyle(QCPGraph::lsNone);
+        g->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,QPen(LATEST1_COLOR,2),QBrush(Qt::NoBrush),11));
+        g->setData(QVector<double>(1,x[n-1]),QVector<double>(1,y[n-1]));
+        p->replot(QCustomPlot::rpQueuedReplot);
+    }
+}
+
+// ===== 信号 × ショット ヒートマップ(子パネル) =====
+// 縦軸=信号(合成した基準値、基準信号、説明変数)、横軸=ショット(時間順)。値は「Get 時点の平均からの差 / 標準偏差」(±3 で頭打ち)。
+// 時間とともに、どの信号がいつ変化したかを一覧できる。データが更新されるたびに(パネルが開いていれば)描き直す
+void MainWindow::open_shot_heatmap()
+{
+    if(!shot_win){
+        shot_win = new QWidget(this,Qt::Window);
+        shot_win->setWindowTitle("Signal x Shot Heatmap");
+        QVBoxLayout *top = new QVBoxLayout(shot_win);
+        top->setContentsMargins(6,6,6,6);
+        shot_info = new QLabel(shot_win);
+        top->addWidget(shot_info);
+        shot_plot = new QCustomPlot(shot_win);
+        shot_plot->setMouseTracking(true);
+        top->addWidget(shot_plot,1);
+        connect(shot_plot,&QCustomPlot::mouseMove,this,[this](QMouseEvent *ev){
+            const int n = corrdata ? corrdata->data_size() : 0;
+            const int N = shot_names.size();
+            int i = qRound(shot_plot->xAxis->pixelToCoord(ev->pos().x()));
+            int r = qRound(shot_plot->yAxis->pixelToCoord(ev->pos().y()));
+            if(n<2 || i<0 || i>=n || r<0 || r>=N || shot_z.size()!=n*N || !shot_plot->axisRect()->rect().contains(ev->pos())){
+                QToolTip::hideText();
+                return;
+            }
+            QToolTip::showText(ev->globalPosition().toPoint(),
+                QString("%1\n%2   (shot %3)\nvalue = %4   z = %5").arg(shot_names[r],QString::fromStdString(corrdata->endtime(i))).arg(i)
+                    .arg(corrdata->value(shot_keys[r].toStdString(),i),0,'g',6).arg(shot_z[r*n+i],0,'f',2),shot_plot);
+        });
+        shot_win->resize(1100,640);
+    }
+    shot_win->show();
+    shot_win->raise();
+    shot_win->activateWindow();
+    update_shot_heatmap();
+}
+
+void MainWindow::update_shot_heatmap()
+{
+    if(!shot_win || !shot_win->isVisible() || !corrdata)return;
+    const int n = corrdata->data_size();
+    const QStringList keys = panel_signal_names();
+    const int N = keys.size();
+    if(n<2 || N<1){shot_info->setText("No data yet. Press Get first.");return;}
+    shot_keys = keys;
+    shot_names.clear();
+    for(const QString &s : keys)shot_names << (s==QString::fromStdString(Corr_data::target_name_virtual()) ? QString::fromStdString(corrdata->target_label())+" (combined)" : s);
+    shot_z.assign(n*N,0.0);
+    for(int r=0;r<N;r++){
+        const string nm = keys[r].toStdString();
+        double mean = 0;
+        for(int i=0;i<n;i++)mean += corrdata->value(nm,i);
+        mean /= n;
+        double var = 0;
+        for(int i=0;i<n;i++){double d = corrdata->value(nm,i)-mean;var += d*d;}
+        double sd = sqrt(var/n);
+        const double base = trend_base.contains(keys[r]) ? trend_base[keys[r]] : mean;      // 基準は Get 時点の平均
+        for(int i=0;i<n;i++){
+            double z = sd>0 ? (corrdata->value(nm,i)-base)/sd : 0.0;
+            if(!std::isfinite(z))z = 0;
+            shot_z[r*n+i] = qBound(-3.0,z,3.0);
+        }
+    }
+    style_plot(shot_plot);
+    shot_plot->clearPlottables();
+    QCPColorMap *map = new QCPColorMap(shot_plot->xAxis,shot_plot->yAxis);
+    map->data()->setSize(n,N);
+    map->data()->setRange(QCPRange(0,n-1),QCPRange(0,N-1));
+    for(int r=0;r<N;r++)for(int i=0;i<n;i++)map->data()->setCell(i,r,shot_z[r*n+i]);
+    map->setInterpolate(false);
+    map->setGradient(heat_gradient(true));
+    map->setDataRange(QCPRange(-3,3));
+    if(!shot_scale){
+        shot_scale = new QCPColorScale(shot_plot);
+        shot_plot->plotLayout()->addElement(0,1,shot_scale);
+        shot_scale->setType(QCPAxis::atRight);
+    }
+    map->setColorScale(shot_scale);
+    shot_scale->axis()->setLabel("(value - Get mean) / sigma");
+    shot_scale->axis()->setLabelColor(T.text);
+    shot_scale->axis()->setTickLabelColor(T.muted);
+    shot_scale->axis()->setBasePen(QPen(T.axis_line));
+    shot_scale->axis()->setTickPen(QPen(T.axis_line));
+    shot_scale->axis()->setSubTickPen(QPen(T.axis_line));
+    QSharedPointer<QCPAxisTickerText> tx(new QCPAxisTickerText),ty(new QCPAxisTickerText);
+    const int step = qMax(1,n/8);
+    for(int i=0;i<n;i+=step){
+        QString t = QString::fromStdString(corrdata->endtime(i));
+        tx->addTick(i,t.mid(t.indexOf(' ')+1,8));      // HH:mm:ss
+    }
+    for(int r=0;r<N;r++)ty->addTick(r,shot_names[r]);
+    shot_plot->xAxis->setTicker(tx);
+    shot_plot->yAxis->setTicker(ty);
+    QFont f = font();
+    f.setPointSize(8);
+    for(QCPAxis *ax : {shot_plot->xAxis,shot_plot->yAxis}){
+        ax->setTickLabelFont(f);
+        ax->setSubTicks(false);
+        ax->grid()->setVisible(false);
+    }
+    shot_plot->xAxis->setRange(-0.5,n-0.5);
+    shot_plot->yAxis->setRange(-0.5,N-0.5);
+    shot_plot->yAxis->setRangeReversed(true);
+    shot_plot->xAxis->setLabel("time (shots in order)");
+    shot_plot->setInteractions(QCP::Interaction(0));
+    shot_info->setText(QString("%1 signals, %2 shots.  Red = above the Get-time mean, blue = below (in sigma, clipped at +-3).").arg(N).arg(n));
+    shot_plot->replot(QCustomPlot::rpQueuedReplot);
 }
 
 bool MainWindow::sync_targets()
@@ -974,7 +1194,11 @@ void MainWindow::plot_trend(QCustomPlot *plot)
     set_scatter_data(plot,x,y,y,shot_all);
 
     set_recent_points(plot,x,y);
-    if(plot==ui->widget)update_moving_average();
+    if(plot==ui->widget){
+        update_moving_average();
+        update_density_panel();     // 開いているヒートマップの子パネルも、データの更新に合わせて描き直す
+        update_shot_heatmap();
+    }
     //    DLOG<<"****  "<<corrdata->sig_name(n)<<"  2****"<<endl;
 
     if(ui->checkBox_th->checkState()==Qt::Checked){
@@ -1390,6 +1614,8 @@ void MainWindow::switch_theme(const QString &name)
     update_trend_highlight();
     update_moving_average();
     draw_heatmap();
+    update_density_panel();
+    update_shot_heatmap();
     for(auto it=trend_rows.begin();it!=trend_rows.end();++it){
         style_plot(it->plot);
         if(it->cursor)it->cursor->setPen(QPen(T.text,1.5,Qt::DashLine));
@@ -3059,6 +3285,15 @@ void MainWindow::createActions()
     heatAct->setStatusTip(tr("Open a child panel with the correlation matrix of all signals (Spearman or MIC) as a heatmap"));
     connect(heatAct, &QAction::triggered, this, &MainWindow::open_heatmap_panel);
     fileMenu->addAction(heatAct);
+
+    QAction *densAct = new QAction(tr("&Density Heatmap..."), this);
+    densAct->setStatusTip(tr("Open a child panel with a density heatmap (x = each signal, y = combined target) for every signal"));
+    connect(densAct, &QAction::triggered, this, &MainWindow::open_density_panel);
+    fileMenu->addAction(densAct);
+    QAction *shotAct = new QAction(tr("Signal x &Shot Heatmap..."), this);
+    shotAct->setStatusTip(tr("Open a child panel with a heatmap of every signal (rows) over the shots in time order (columns)"));
+    connect(shotAct, &QAction::triggered, this, &MainWindow::open_shot_heatmap);
+    fileMenu->addAction(shotAct);
 
     QAction *trendPanelAct = new QAction(tr("Trend &Panel..."), this);
     trendPanelAct->setStatusTip(tr("Open a child panel with the trend graph of every signal in Plot Signal (dashed line at the mean value of the last Get)"));
