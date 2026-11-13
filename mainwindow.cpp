@@ -654,7 +654,10 @@ void MainWindow::draw_heatmap()
         heat_plot->plotLayout()->addElement(0,1,heat_scale);
         heat_scale->setType(QCPAxis::atRight);
     }
+    // setColorScale は、カラースケールの色と範囲(既定は黒→青→白)をマップに引き継ぐので、色と範囲はその後に設定する
     map->setColorScale(heat_scale);
+    map->setDataRange(heat_is_mic ? QCPRange(0,1) : QCPRange(-1,1));
+    map->setGradient(heat_gradient(!heat_is_mic));
     map->setDataRange(heat_is_mic ? QCPRange(0,1) : QCPRange(-1,1));
     map->setGradient(heat_gradient(!heat_is_mic));
     heat_scale->axis()->setLabel(heat_is_mic ? "MIC" : "Spearman");
@@ -880,7 +883,10 @@ void MainWindow::update_shot_heatmap()
         shot_plot->plotLayout()->addElement(0,1,shot_scale);
         shot_scale->setType(QCPAxis::atRight);
     }
+    // setColorScale は、カラースケールの色と範囲(既定は黒→青→白)をマップに引き継ぐので、色と範囲はその後に設定する
     map->setColorScale(shot_scale);
+    map->setGradient(heat_gradient(true));
+    map->setDataRange(QCPRange(-3,3));
     shot_scale->axis()->setLabel("(value - Get mean) / sigma");
     shot_scale->axis()->setLabelColor(T.text);
     shot_scale->axis()->setTickLabelColor(T.muted);
@@ -1071,7 +1077,10 @@ void MainWindow::update_xy_heatmap()
         xy_plot->plotLayout()->addElement(0,1,xy_scale);
         xy_scale->setType(QCPAxis::atRight);
     }
+    // setColorScale は、カラースケールの色と範囲(既定は黒→青→白)をマップに引き継ぐので、色と範囲はその後に設定する
     map->setColorScale(xy_scale);
+    map->setGradient(heat_gradient(false));
+    map->setDataRange(QCPRange(vmin,vmax));
     xy_scale->axis()->setLabel(QString("%1 of %2").arg(xy_stat->currentText(),xy_z->currentText()));
     xy_scale->axis()->setLabelColor(T.text);
     xy_scale->axis()->setTickLabelColor(T.muted);
