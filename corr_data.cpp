@@ -645,6 +645,58 @@ void Corr_data::set_self_stats()
 }
 // rows に挙げたショットだけを使って、基準信号 sig[0] と各信号のMICなどを計算する。
 // 基準信号側の値(x)は全信号で共通なので1回だけ作る(Detrend も1回)。MINEは x,y を書き換えない。
+// 信号どうしの相関行列(行優先 N×N)。全ショットを使う(Threshold は使わない。Detrend はオンなら適用)。
+//   use_mic=false : Spearman 順位相関(符号付き、-1〜1。どちらかが一定値なら 0)
+//   use_mic=true  : MIC(0〜1)
+// cb(済んだ組数, 全組数) が false を返したら中止して、空のベクトルを返す
+vector<double> Corr_data::corr_matrix(const vector<string> &names,bool use_mic,std::function<bool(int,int)> cb)
+{
+    const int N = (int)names.size();
+    vector<double> M((size_t)N*N,0.0);
+    for(int i=0;i<N;i++)M[(size_t)i*N+i] = 1.0;
+    vector<int> rows;
+    for(int k=0;k<(int)data.size();k++)if(!data[k].beg_time.empty())rows.push_back(k);
+    const int n = (int)rows.size();
+    if(n<2 || N<2)return M;
+    vector<vector<double>> col(N,vector<double>(n));
+    for(int j=0;j<N;j++){
+        for(int k=0;k<n;k++)col[j][k] = value(names[j],rows[k]);
+        if(detrend_flg)detrend(col[j].data(),n);
+    }
+    const int total = N*(N-1)/2;
+    int done = 0;
+    vector<vector<double>> rk;
+    if(!use_mic){
+        rk.resize(N);
+        const double mean = (n+1)/2.0;
+        for(int j=0;j<N;j++){
+            rk[j] = rank_avg(col[j].data(),n);
+            double s = 0;
+            for(int k=0;k<n;k++){rk[j][k] -= mean;s += rk[j][k]*rk[j][k];}
+            double nrm = sqrt(s);
+            for(int k=0;k<n;k++)rk[j][k] = nrm>0 ? rk[j][k]/nrm : 0.0;     // 一定値の信号は 0 のまま
+        }
+    }
+    const double alpha = mic_alpha(n);
+    for(int i=0;i<N;i++){
+        for(int j=i+1;j<N;j++){
+            double v = 0;
+            if(use_mic){
+                MINE mine(alpha, 15, EST_MIC_APPROX);
+                mine.compute_score(col[i].data(),col[j].data(),n);
+                v = mine.mic();
+            }else{
+                for(int k=0;k<n;k++)v += rk[i][k]*rk[j][k];
+            }
+            if(!std::isfinite(v))v = 0;
+            M[(size_t)i*N+j] = M[(size_t)j*N+i] = v;
+            done++;
+            if(cb && !cb(done,total))return vector<double>();
+        }
+    }
+    return M;
+}
+
 void Corr_data::calc_mic_rows(const vector<int> &rows)
 {
     if(sig.empty())return;

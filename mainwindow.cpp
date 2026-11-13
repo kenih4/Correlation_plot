@@ -26,6 +26,8 @@
 #include <QLabel>
 #include <QCheckBox>
 #include <QInputDialog>
+#include <QComboBox>
+#include <QToolTip>
 #include <QMessageBox>
 
 // 自動更新ごとに書き出すCSV
@@ -519,6 +521,175 @@ void MainWindow::update_moving_average()
         row.ma_graph->setVisible(ok);
         row.plot->replot(QCustomPlot::rpQueuedReplot);
     }
+}
+
+// ===== ヒートマップ(子パネル) =====
+// 信号どうしの相関行列を色で表す。信号は、合成した基準値、基準信号、説明変数の順(子パネルのトレンドと同じ)。
+//   Spearman : 順位相関(-1〜1。青=負、赤=正)      MIC : 0〜1(非線形な関係も拾う。信号が多いと計算に時間がかかる)
+// 全ショットを使う(Threshold は使わない。Detrend はオンなら適用)。自動更新では描き直さず、Update ボタンで更新する
+QStringList MainWindow::panel_signal_names()
+{
+    QStringList names;
+    if(!corrdata)return names;
+    for(int i=0;i<corrdata->sig_size();i++){
+        names << QString::fromStdString(corrdata->sig_name(i));
+        if(i==0)for(int k=0;k<corrdata->target_count();k++)names << QString::fromStdString(corrdata->target_name(k));
+    }
+    return names;
+}
+
+void MainWindow::open_heatmap_panel()
+{
+    if(!heat_win){
+        heat_win = new QWidget(this,Qt::Window);
+        heat_win->setWindowTitle("Correlation Heatmap");
+        QVBoxLayout *top = new QVBoxLayout(heat_win);
+        top->setContentsMargins(6,6,6,6);
+        QHBoxLayout *bar = new QHBoxLayout;
+        bar->addWidget(new QLabel("Metric:",heat_win));
+        heat_metric = new QComboBox(heat_win);
+        heat_metric->addItem("Spearman (signed)");
+        heat_metric->addItem("MIC");
+        bar->addWidget(heat_metric);
+        QPushButton *upd = new QPushButton("Update",heat_win);
+        upd->setToolTip("Recompute with the current data (not updated automatically by Auto reload)");
+        bar->addWidget(upd);
+        heat_info = new QLabel(heat_win);
+        bar->addWidget(heat_info,1);
+        top->addLayout(bar);
+        heat_plot = new QCustomPlot(heat_win);
+        heat_plot->setMouseTracking(true);
+        top->addWidget(heat_plot,1);
+        connect(heat_metric,QOverload<int>::of(&QComboBox::currentIndexChanged),this,[this](int){update_heatmap(false);});
+        connect(upd,&QPushButton::clicked,this,[this](){update_heatmap(true);});
+        connect(heat_plot,&QCustomPlot::mouseMove,this,[this](QMouseEvent *ev){
+            const int N = heat_names.size();
+            if(N<2 || heat_vals.size()!=N*N)return;
+            int col = qRound(heat_plot->xAxis->pixelToCoord(ev->pos().x()));
+            int row = qRound(heat_plot->yAxis->pixelToCoord(ev->pos().y()));
+            if(col<0 || col>=N || row<0 || row>=N || !heat_plot->axisRect()->rect().contains(ev->pos())){
+                QToolTip::hideText();
+                return;
+            }
+            QToolTip::showText(ev->globalPosition().toPoint(),
+                QString("%1\n%2\n%3 = %4").arg(heat_names[row],heat_names[col],heat_is_mic ? "MIC" : "Spearman").arg(heat_vals[row*N+col],0,'f',3),heat_plot);
+        });
+        heat_win->resize(920,800);
+    }
+    heat_win->show();
+    heat_win->raise();
+    heat_win->activateWindow();
+    update_heatmap(false);
+}
+
+void MainWindow::update_heatmap(bool force)
+{
+    if(!heat_win || !heat_win->isVisible())return;
+    if(!corrdata || corrdata->data_size()<2 || corrdata->sig_size()<2){
+        heat_info->setText("No data yet. Press Get first.");
+        return;
+    }
+    const QStringList names = panel_signal_names();
+    const int m = heat_metric->currentIndex();
+    const QString key = QString::number(corrdata->data_version()) + "|" + names.join(",") + "|" + QString::number(detrend_act->isChecked());
+    if(force || heat_key[m]!=key || heat_cache[m].size()!=names.size()*names.size()){
+        vector<string> nm;
+        for(const QString &s : names)nm.push_back(s.toStdString());
+        struct BusyGuard{bool &f;BusyGuard(bool &b):f(b){f = true;}~BusyGuard(){f = false;}} busy_guard(get_busy);   // 計算中は自動更新を止める
+        QProgressDialog dlg("Computing the correlation matrix...","Cancel",0,100,heat_win);
+        dlg.setWindowTitle("Correlation Heatmap");
+        dlg.setWindowModality(Qt::WindowModal);
+        dlg.setMinimumDuration(400);
+        vector<double> M = corrdata->corr_matrix(nm,m==1,[&dlg](int done,int total){
+            dlg.setValue(total>0 ? 100*done/total : 100);
+            QApplication::processEvents();
+            return !dlg.wasCanceled();
+        });
+        dlg.setValue(100);
+        if(M.empty()){heat_info->setText("Canceled.");return;}
+        heat_cache[m] = QVector<double>(M.begin(),M.end());
+        heat_key[m] = key;
+        heat_cache_time[m] = QDateTime::currentDateTime();
+        heat_cache_shots[m] = corrdata->used_shots();
+    }
+    heat_names.clear();
+    for(const QString &s : names)heat_names << (s==QString::fromStdString(Corr_data::target_name_virtual()) ? QString::fromStdString(corrdata->target_label())+" (combined)" : s);
+    heat_vals = heat_cache[m];
+    heat_is_mic = (m==1);
+    heat_info->setText(QString("%1 signals, %2 shots  (computed %3)").arg(names.size()).arg(heat_cache_shots[m]).arg(heat_cache_time[m].toString("HH:mm:ss")));
+    draw_heatmap();
+}
+
+void MainWindow::draw_heatmap()
+{
+    if(!heat_plot)return;
+    const int N = heat_names.size();
+    if(N<2 || heat_vals.size()!=N*N)return;
+    style_plot(heat_plot);
+    heat_plot->clearPlottables();
+    heat_plot->clearItems();
+    QCPColorMap *map = new QCPColorMap(heat_plot->xAxis,heat_plot->yAxis);
+    map->data()->setSize(N,N);
+    map->data()->setRange(QCPRange(0,N-1),QCPRange(0,N-1));
+    for(int r=0;r<N;r++)for(int cc=0;cc<N;cc++)map->data()->setCell(cc,r,heat_vals[r*N+cc]);
+    map->setInterpolate(false);
+    if(!heat_scale){
+        heat_scale = new QCPColorScale(heat_plot);
+        heat_plot->plotLayout()->addElement(0,1,heat_scale);
+        heat_scale->setType(QCPAxis::atRight);
+    }
+    map->setColorScale(heat_scale);
+    QCPColorGradient g;
+    g.clearColorStops();
+    const QColor mid = T.dark ? T.plot_bg : QColor(Qt::white);
+    if(!heat_is_mic){
+        map->setDataRange(QCPRange(-1,1));
+        g.setColorStopAt(0.0,T.dark ? QColor("#4D9BFF") : QColor("#1f77b4"));
+        g.setColorStopAt(0.5,mid);
+        g.setColorStopAt(1.0,T.dark ? QColor("#FF5A5F") : QColor("#d62728"));
+    }else{
+        map->setDataRange(QCPRange(0,1));
+        g.setColorStopAt(0.0,mid);
+        g.setColorStopAt(1.0,MAIN_COLOR);
+    }
+    map->setGradient(g);
+    heat_scale->axis()->setLabel(heat_is_mic ? "MIC" : "Spearman");
+    heat_scale->axis()->setLabelColor(T.text);
+    heat_scale->axis()->setTickLabelColor(T.muted);
+    heat_scale->axis()->setBasePen(QPen(T.axis_line));
+    heat_scale->axis()->setTickPen(QPen(T.axis_line));
+    heat_scale->axis()->setSubTickPen(QPen(T.axis_line));
+
+    QSharedPointer<QCPAxisTickerText> tx(new QCPAxisTickerText),ty(new QCPAxisTickerText);
+    for(int i=0;i<N;i++){tx->addTick(i,heat_names[i]);ty->addTick(i,heat_names[i]);}
+    heat_plot->xAxis->setTicker(tx);
+    heat_plot->yAxis->setTicker(ty);
+    QFont f = font();
+    f.setPointSize(8);
+    for(QCPAxis *ax : {heat_plot->xAxis,heat_plot->yAxis}){
+        ax->setTickLabelFont(f);
+        ax->setSubTicks(false);
+        ax->grid()->setVisible(false);
+        ax->setRange(-0.5,N-0.5);
+    }
+    heat_plot->xAxis->setTickLabelRotation(-60);
+    heat_plot->yAxis->setRangeReversed(true);           // 1行目を上に
+    heat_plot->xAxis->setRangeReversed(false);
+    heat_plot->setInteractions(QCP::Interaction(0));
+    // 信号が少ないときは、マスの中に値も書く
+    if(N<=25){
+        QFont tf = font();
+        tf.setPointSize(N<=12 ? 9 : 7);
+        for(int r=0;r<N;r++)for(int cc=0;cc<N;cc++){
+            QCPItemText *t = new QCPItemText(heat_plot);
+            t->position->setType(QCPItemPosition::ptPlotCoords);
+            t->position->setCoords(cc,r);
+            t->setText(QString::number(heat_vals[r*N+cc],'f',2));
+            t->setFont(tf);
+            t->setColor(T.text);
+        }
+    }
+    heat_plot->replot();
 }
 
 bool MainWindow::sync_targets()
@@ -1218,6 +1389,7 @@ void MainWindow::switch_theme(const QString &name)
     style_add_badge();
     update_trend_highlight();
     update_moving_average();
+    draw_heatmap();
     for(auto it=trend_rows.begin();it!=trend_rows.end();++it){
         style_plot(it->plot);
         if(it->cursor)it->cursor->setPen(QPen(T.text,1.5,Qt::DashLine));
@@ -2882,6 +3054,11 @@ void MainWindow::createActions()
     tagOffsetAct->setStatusTip(tr("Specify offsets added to sacla_tag and sr_tag when matching signal data (default 0)"));
     connect(tagOffsetAct, &QAction::triggered, this, &MainWindow::show_tag_offset);
     fileMenu->addAction(tagOffsetAct);
+
+    QAction *heatAct = new QAction(tr("Correlation &Heatmap..."), this);
+    heatAct->setStatusTip(tr("Open a child panel with the correlation matrix of all signals (Spearman or MIC) as a heatmap"));
+    connect(heatAct, &QAction::triggered, this, &MainWindow::open_heatmap_panel);
+    fileMenu->addAction(heatAct);
 
     QAction *trendPanelAct = new QAction(tr("Trend &Panel..."), this);
     trendPanelAct->setStatusTip(tr("Open a child panel with the trend graph of every signal in Plot Signal (dashed line at the mean value of the last Get)"));

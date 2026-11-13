@@ -11,6 +11,7 @@
 #include <QActionGroup>
 #include <QVBoxLayout>
 #include <QCheckBox>
+#include <QComboBox>
 #include "corr_data.h"
 #include "qcustomplot.h"
 
@@ -79,6 +80,23 @@ private slots:
     void rank_mode_changed();       // File メニューの Rank by ... (MIC / Importance / Gap of Means)
 
 private:
+    // ヒートマップ(子パネル)
+    void open_heatmap_panel();
+    void update_heatmap(bool force);
+    void draw_heatmap();
+    QStringList panel_signal_names();
+    QWidget *heat_win = nullptr;
+    QCustomPlot *heat_plot = nullptr;
+    QComboBox *heat_metric = nullptr;
+    QLabel *heat_info = nullptr;
+    QCPColorScale *heat_scale = nullptr;
+    QStringList heat_names;
+    QVector<double> heat_vals;
+    bool heat_is_mic = false;
+    QString heat_key[2];
+    QVector<double> heat_cache[2];
+    QDateTime heat_cache_time[2];
+    int heat_cache_shots[2] = {0,0};
     // 基準信号(Target Signal)
     bool load_targets();
     void save_targets();
