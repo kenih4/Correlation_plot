@@ -115,6 +115,21 @@ private:
     QCPColorScale *shot_scale = nullptr;
     QStringList shot_keys,shot_names;
     std::vector<double> shot_z;
+    // XY ヒートマップ(子パネル)
+    void open_xy_heatmap();
+    void update_xy_heatmap();
+    QWidget *xy_win = nullptr;
+    QCustomPlot *xy_plot = nullptr;
+    QComboBox *xy_x = nullptr,*xy_y = nullptr,*xy_z = nullptr,*xy_stat = nullptr;
+    QSpinBox *xy_bins = nullptr;
+    QCheckBox *xy_pts = nullptr;
+    QLabel *xy_info = nullptr;
+    QCPColorScale *xy_scale = nullptr;
+    QStringList xy_items,xy_zkeys;
+    int xy_B = 0;
+    QVector<int> xy_cnt;
+    QVector<double> xy_val;
+    double xy_xlo = 0,xy_xhi = 1,xy_ylo = 0,xy_yhi = 1;
     // 基準信号(Target Signal)
     bool load_targets();
     void save_targets();

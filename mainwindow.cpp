@@ -912,6 +912,196 @@ void MainWindow::update_shot_heatmap()
     shot_plot->replot(QCustomPlot::rpQueuedReplot);
 }
 
+// ===== XY ヒートマップ(子パネル) =====
+// Plot Signal リストから説明変数を2つ選び(X と Y)、各マスの色を「基準信号の強度」(既定は合成した基準値)にする。
+// 色は、そのマスに入ったショットの平均(または最大)。ショットが入らないマスは塗らない。
+// 「基準信号が強くなる、2つの信号の組み合わせ」を探すためのもの。データが更新されるたびに(パネルが開いていれば)描き直す
+static void finite_range_of(const QVector<double> &v,double &lo,double &hi)
+{
+    lo = 1e300;hi = -1e300;
+    for(double d : v)if(std::isfinite(d)){lo = std::min(lo,d);hi = std::max(hi,d);}
+    if(lo>hi){lo = 0;hi = 1;}
+    if(hi-lo<1e-12){lo -= 0.5;hi += 0.5;}
+}
+
+void MainWindow::open_xy_heatmap()
+{
+    if(!xy_win){
+        xy_win = new QWidget(this,Qt::Window);
+        xy_win->setWindowTitle("XY Heatmap");
+        QVBoxLayout *top = new QVBoxLayout(xy_win);
+        top->setContentsMargins(6,6,6,6);
+        QGridLayout *bar = new QGridLayout;
+        xy_x = new QComboBox(xy_win);
+        xy_y = new QComboBox(xy_win);
+        xy_z = new QComboBox(xy_win);
+        xy_stat = new QComboBox(xy_win);
+        xy_stat->addItem("Mean");
+        xy_stat->addItem("Max");
+        xy_bins = new QSpinBox(xy_win);
+        xy_bins->setRange(5,80);
+        xy_bins->setValue(20);
+        xy_pts = new QCheckBox("Show shots",xy_win);
+        for(QComboBox *cb : {xy_x,xy_y,xy_z})cb->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+        bar->addWidget(new QLabel("X:",xy_win),0,0);   bar->addWidget(xy_x,0,1);
+        bar->addWidget(new QLabel("Y:",xy_win),0,2);   bar->addWidget(xy_y,0,3);
+        bar->addWidget(new QLabel("Color (Z):",xy_win),1,0);  bar->addWidget(xy_z,1,1);
+        bar->addWidget(new QLabel("Per cell:",xy_win),1,2);   bar->addWidget(xy_stat,1,3);
+        bar->addWidget(new QLabel("Bins:",xy_win),0,4);       bar->addWidget(xy_bins,0,5);
+        bar->addWidget(xy_pts,1,4,1,2);
+        bar->setColumnStretch(1,1);
+        bar->setColumnStretch(3,1);
+        top->addLayout(bar);
+        xy_info = new QLabel(xy_win);
+        top->addWidget(xy_info);
+        xy_plot = new QCustomPlot(xy_win);
+        xy_plot->setMouseTracking(true);
+        top->addWidget(xy_plot,1);
+        auto upd = [this](){update_xy_heatmap();};
+        connect(xy_x,QOverload<int>::of(&QComboBox::currentIndexChanged),this,upd);
+        connect(xy_y,QOverload<int>::of(&QComboBox::currentIndexChanged),this,upd);
+        connect(xy_z,QOverload<int>::of(&QComboBox::currentIndexChanged),this,upd);
+        connect(xy_stat,QOverload<int>::of(&QComboBox::currentIndexChanged),this,upd);
+        connect(xy_bins,QOverload<int>::of(&QSpinBox::valueChanged),this,upd);
+        connect(xy_pts,&QCheckBox::toggled,this,upd);
+        connect(xy_plot,&QCustomPlot::mouseMove,this,[this](QMouseEvent *ev){
+            const int B = xy_B;
+            if(B<2 || xy_cnt.size()!=B*B || !xy_plot->axisRect()->rect().contains(ev->pos())){QToolTip::hideText();return;}
+            double x = xy_plot->xAxis->pixelToCoord(ev->pos().x()),y = xy_plot->yAxis->pixelToCoord(ev->pos().y());
+            int ix = qRound((x-xy_xlo)/(xy_xhi-xy_xlo)*(B-1)),iy = qRound((y-xy_ylo)/(xy_yhi-xy_ylo)*(B-1));
+            if(ix<0 || ix>=B || iy<0 || iy>=B){QToolTip::hideText();return;}
+            int k = iy*B+ix;
+            const double dx = (xy_xhi-xy_xlo)/(B-1),dy = (xy_yhi-xy_ylo)/(B-1);
+            QString t = QString("x = %1 .. %2\ny = %3 .. %4\nshots = %5").arg(xy_xlo+ix*dx-dx/2,0,'g',5).arg(xy_xlo+ix*dx+dx/2,0,'g',5)
+                .arg(xy_ylo+iy*dy-dy/2,0,'g',5).arg(xy_ylo+iy*dy+dy/2,0,'g',5).arg(xy_cnt[k]);
+            if(xy_cnt[k]>0)t += QString("\n%1 = %2").arg(xy_stat->currentText(),QString::number(xy_val[k],'g',6));
+            QToolTip::showText(ev->globalPosition().toPoint(),t,xy_plot);
+        });
+        xy_win->resize(900,760);
+    }
+    xy_win->show();
+    xy_win->raise();
+    xy_win->activateWindow();
+    update_xy_heatmap();
+}
+
+void MainWindow::update_xy_heatmap()
+{
+    if(!xy_win || !xy_win->isVisible() || !corrdata)return;
+    // コンボボックス: X、Y は Plot Signal リストの信号。Z は、合成した基準値と各基準信号。選択は、信号名で引き継ぐ
+    QStringList items;
+    for(int i=0;i<ui->listWidget->count();i++)items << ui->listWidget->item(i)->text();
+    QStringList zkeys;
+    zkeys << QString::fromStdString(Corr_data::target_name_virtual());
+    for(int k=0;k<corrdata->target_count();k++)zkeys << QString::fromStdString(corrdata->target_name(k));
+    if(items!=xy_items || zkeys!=xy_zkeys){
+        const QString cx = xy_x->currentText(),cy = xy_y->currentText(),cz = xy_z->currentData().toString();
+        QSignalBlocker b1(xy_x),b2(xy_y),b3(xy_z);
+        xy_x->clear();  xy_y->clear();  xy_z->clear();
+        for(const QString &s : items){xy_x->addItem(s);xy_y->addItem(s);}
+        for(const QString &s : zkeys)
+            xy_z->addItem(s==QString::fromStdString(Corr_data::target_name_virtual()) ? QString::fromStdString(corrdata->target_label())+" (combined)" : s,s);
+        int ix = xy_x->findText(cx),iy = xy_y->findText(cy),iz = xy_z->findData(cz);
+        xy_x->setCurrentIndex(ix>=0 ? ix : 0);
+        xy_y->setCurrentIndex(iy>=0 ? iy : (items.size()>1 ? 1 : 0));
+        xy_z->setCurrentIndex(iz>=0 ? iz : 0);
+        xy_items = items;  xy_zkeys = zkeys;
+    }
+    const int n = corrdata->data_size();
+    if(n<2 || corrdata->sig_size()<2){xy_info->setText("No data yet. Press Get first.");return;}
+    const QString xn = xy_x->currentText(),yn = xy_y->currentText(),zn = xy_z->currentData().toString();
+    if(xn.isEmpty() || yn.isEmpty()){xy_info->setText("Add signals to the Plot Signal list.");return;}
+    auto fetched = [this](const QString &name){
+        for(int i=1;i<corrdata->sig_size();i++)if(QString::fromStdString(corrdata->sig_name(i))==name)return true;
+        return false;
+    };
+    if(!fetched(xn) || !fetched(yn)){xy_info->setText("The selected signal has not been fetched yet. Press Get.");return;}
+    if(xn==yn){xy_info->setText("Choose two different signals for X and Y.");return;}
+
+    const int B = xy_bins->value();
+    QVector<double> x(n),y(n),z(n);
+    for(int i=0;i<n;i++){
+        x[i] = corrdata->value(xn.toStdString(),i);
+        y[i] = corrdata->value(yn.toStdString(),i);
+        z[i] = corrdata->value(zn.toStdString(),i);
+    }
+    double xlo,xhi,ylo,yhi;
+    finite_range_of(x,xlo,xhi);
+    finite_range_of(y,ylo,yhi);
+    const bool use_max = xy_stat->currentIndex()==1;
+    QVector<double> sum(B*B,0.0);
+    QVector<int> cnt(B*B,0);
+    QVector<double> val(B*B,0.0);
+    for(int i=0;i<n;i++){
+        if(!std::isfinite(x[i]) || !std::isfinite(y[i]) || !std::isfinite(z[i]))continue;
+        int ix = qBound(0,qRound((x[i]-xlo)/(xhi-xlo)*(B-1)),B-1);
+        int iy = qBound(0,qRound((y[i]-ylo)/(yhi-ylo)*(B-1)),B-1);
+        int k = iy*B+ix;
+        if(use_max)val[k] = cnt[k]==0 ? z[i] : std::max(val[k],z[i]);
+        else sum[k] += z[i];
+        cnt[k]++;
+    }
+    double vmin = 1e300,vmax = -1e300;
+    for(int k=0;k<B*B;k++){
+        if(cnt[k]==0)continue;
+        if(!use_max)val[k] = sum[k]/cnt[k];
+        vmin = std::min(vmin,val[k]);  vmax = std::max(vmax,val[k]);
+    }
+    if(vmin>vmax){vmin = 0;vmax = 1;}
+    if(vmax-vmin<1e-12)vmax = vmin+1;
+    xy_B = B;  xy_cnt = cnt;  xy_val = val;
+    xy_xlo = xlo;  xy_xhi = xhi;  xy_ylo = ylo;  xy_yhi = yhi;
+
+    style_plot(xy_plot);
+    xy_plot->clearPlottables();
+    QCPColorMap *map = new QCPColorMap(xy_plot->xAxis,xy_plot->yAxis);
+    map->data()->setSize(B,B);
+    map->data()->setRange(QCPRange(xlo,xhi),QCPRange(ylo,yhi));
+    map->data()->fill(vmin);
+    map->data()->fillAlpha(0);                  // ショットが入らないマスは塗らない
+    for(int iy=0;iy<B;iy++)for(int ix=0;ix<B;ix++){
+        int k = iy*B+ix;
+        if(cnt[k]>0){map->data()->setCell(ix,iy,val[k]);map->data()->setAlpha(ix,iy,255);}
+    }
+    map->setInterpolate(false);
+    map->setGradient(heat_gradient(false));
+    map->setDataRange(QCPRange(vmin,vmax));
+    if(!xy_scale){
+        xy_scale = new QCPColorScale(xy_plot);
+        xy_plot->plotLayout()->addElement(0,1,xy_scale);
+        xy_scale->setType(QCPAxis::atRight);
+    }
+    map->setColorScale(xy_scale);
+    xy_scale->axis()->setLabel(QString("%1 of %2").arg(xy_stat->currentText(),xy_z->currentText()));
+    xy_scale->axis()->setLabelColor(T.text);
+    xy_scale->axis()->setTickLabelColor(T.muted);
+    xy_scale->axis()->setBasePen(QPen(T.axis_line));
+    xy_scale->axis()->setTickPen(QPen(T.axis_line));
+    xy_scale->axis()->setSubTickPen(QPen(T.axis_line));
+    // 全ショット(任意)と最新のショット
+    if(xy_pts->isChecked()){
+        QCPGraph *g = xy_plot->addGraph();
+        g->setLineStyle(QCPGraph::lsNone);
+        g->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssDot,T.muted,3));
+        g->setData(x,y);
+    }
+    QCPGraph *gl = xy_plot->addGraph();
+    gl->setLineStyle(QCPGraph::lsNone);
+    gl->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle,QPen(LATEST1_COLOR,2),QBrush(Qt::NoBrush),13));
+    gl->setData(QVector<double>(1,x[n-1]),QVector<double>(1,y[n-1]));
+    const double px = (xhi-xlo)/(B-1)/2,py = (yhi-ylo)/(B-1)/2;      // 端のマスが欠けないように、半マス広げる
+    xy_plot->xAxis->setRange(xlo-px,xhi+px);
+    xy_plot->yAxis->setRange(ylo-py,yhi+py);
+    xy_plot->xAxis->setLabel(xn);
+    xy_plot->yAxis->setLabel(yn);
+    xy_plot->xAxis->setLabelFont(QFont(font().family(),8));
+    xy_plot->yAxis->setLabelFont(QFont(font().family(),8));
+    xy_plot->setInteractions(QCP::Interaction(0));
+    xy_info->setText(QString("%1 shots.  Each cell = %2 of %3 over the shots in the cell.  Ring = latest shot.")
+                     .arg(n).arg(xy_stat->currentText().toLower(),xy_z->currentText()));
+    xy_plot->replot(QCustomPlot::rpQueuedReplot);
+}
+
 bool MainWindow::sync_targets()
 {
     vector<Corr_data::Target> v;
@@ -1198,6 +1388,7 @@ void MainWindow::plot_trend(QCustomPlot *plot)
         update_moving_average();
         update_density_panel();     // 開いているヒートマップの子パネルも、データの更新に合わせて描き直す
         update_shot_heatmap();
+        update_xy_heatmap();
     }
     //    DLOG<<"****  "<<corrdata->sig_name(n)<<"  2****"<<endl;
 
@@ -1616,6 +1807,7 @@ void MainWindow::switch_theme(const QString &name)
     draw_heatmap();
     update_density_panel();
     update_shot_heatmap();
+    update_xy_heatmap();
     for(auto it=trend_rows.begin();it!=trend_rows.end();++it){
         style_plot(it->plot);
         if(it->cursor)it->cursor->setPen(QPen(T.text,1.5,Qt::DashLine));
@@ -3294,6 +3486,11 @@ void MainWindow::createActions()
     shotAct->setStatusTip(tr("Open a child panel with a heatmap of every signal (rows) over the shots in time order (columns)"));
     connect(shotAct, &QAction::triggered, this, &MainWindow::open_shot_heatmap);
     fileMenu->addAction(shotAct);
+
+    QAction *xyAct = new QAction(tr("&XY Heatmap..."), this);
+    xyAct->setStatusTip(tr("Open a child panel: pick two signals from Plot Signal as x and y; the color is the target strength in each cell"));
+    connect(xyAct, &QAction::triggered, this, &MainWindow::open_xy_heatmap);
+    fileMenu->addAction(xyAct);
 
     QAction *trendPanelAct = new QAction(tr("Trend &Panel..."), this);
     trendPanelAct->setStatusTip(tr("Open a child panel with the trend graph of every signal in Plot Signal (dashed line at the mean value of the last Get)"));
