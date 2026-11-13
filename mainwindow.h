@@ -85,6 +85,10 @@ private:
     void add_target_item(const QString &name,double w);
     void load_target_settings();
     bool sync_targets();
+    void update_moving_average();   // メインと子パネルのトレンドの移動平均線
+    QAction *ma_act = nullptr;
+    int ma_window = 10;             // 移動平均の点数(ショット数)
+    QCPGraph *main_ma = nullptr;
     void targets_changed();
     int target_combine = Corr_data::COMBINE_SUM;
     int target_normalize = Corr_data::NORM_AUTO;
@@ -92,7 +96,7 @@ private:
     QWidget *trend_win = nullptr;
     QVBoxLayout *trend_lay = nullptr;
     QScrollArea *trend_scroll = nullptr;
-    struct TrendRow{QWidget *box = nullptr;QCheckBox *cb = nullptr;QCustomPlot *plot = nullptr;QCPItemStraightLine *cursor = nullptr;QCPItemStraightLine *base_line = nullptr;QCPGraph *hi_graph = nullptr;QVector<double> y;};
+    struct TrendRow{QWidget *box = nullptr;QCheckBox *cb = nullptr;QCustomPlot *plot = nullptr;QCPItemStraightLine *cursor = nullptr;QCPItemStraightLine *base_line = nullptr;QCPGraph *hi_graph = nullptr;QCPGraph *ma_graph = nullptr;QVector<double> y;};
     QMap<QString,TrendRow> trend_rows;      // 信号名 → 行
     QVector<double> trend_x;                // 子パネルの横軸(各ショットの時刻)
     QStringList trend_order;                // 現在の行の信号名(順)

@@ -149,6 +149,21 @@ static QCPScatterStyle point_style(const QColor &col,bool filled)
     return QCPScatterStyle(QCPScatterStyle::ssCircle,QPen(col,T.point_pen),QBrush(fill),T.point_size);
 }
 
+// 移動平均(直近 w 点。先頭付近は、そこまでの点だけで平均する)
+static QVector<double> moving_average(const QVector<double> &y,int w)
+{
+    QVector<double> out(y.size());
+    if(w<1)w = 1;
+    double sum = 0;
+    for(int i=0;i<y.size();i++){
+        sum += y[i];
+        if(i>=w)sum -= y[i-w];
+        out[i] = sum/qMin(i+1,w);
+    }
+    return out;
+}
+static QPen ma_pen(){QColor col = T.text;col.setAlpha(210);return QPen(col,2);}
+
 static QString ini_string(QSettings &st,const QString &key,const QString &def);     // 定義は後ろ(settings.ini の値を文字列で読む)
 
 // Target Signal リストの項目: 信号名と重みを持つ(表示は「信号名   [w=重み]」)
@@ -460,6 +475,9 @@ void MainWindow::load_target_settings()
     QFileInfo fi(signal_list_file("settings.ini"));
     if(!fi.exists())return;
     QSettings st(fi.absoluteFilePath(),QSettings::IniFormat);
+    bool okw = false;
+    int mw = ini_string(st,"MovingAverage/shots","10").toInt(&okw);
+    if(okw && mw>=1)ma_window = mw;
     QString cb = ini_string(st,"Target/combine","sum").toLower();
     QString nm = ini_string(st,"Target/normalize","auto").toLower();
     if(cb=="min")target_combine = Corr_data::COMBINE_MIN;
@@ -470,6 +488,39 @@ void MainWindow::load_target_settings()
 }
 
 // Target Signal リスト(名前と重み)と合成の方法を、corrdata に渡す。変わったら true
+// 移動平均線(メインのトレンド、子パネルの各トレンド)。File メニューでオン/オフ、窓の点数は Moving Average Window...(既定は settings.ini [MovingAverage] shots)
+void MainWindow::update_moving_average()
+{
+    const bool on = ma_act && ma_act->isChecked();
+    // メインのトレンド(合成した基準値)
+    if(scatter_xy.contains(ui->widget)){
+        const ScatterData &s = scatter_xy[ui->widget];
+        if(!main_ma){
+            main_ma = ui->widget->addGraph();
+            main_ma->setLineStyle(QCPGraph::lsLine);
+            main_ma->setScatterStyle(QCPScatterStyle::ssNone);
+        }
+        main_ma->setPen(ma_pen());
+        if(on && s.x.size()>1)main_ma->setData(s.x,moving_average(s.y,ma_window));
+        main_ma->setVisible(on && s.x.size()>1);
+        ui->widget->replot(QCustomPlot::rpQueuedReplot);
+    }
+    // 子パネル
+    for(auto it=trend_rows.begin();it!=trend_rows.end();++it){
+        TrendRow &row = it.value();
+        if(!row.ma_graph){
+            row.ma_graph = row.plot->addGraph();
+            row.ma_graph->setLineStyle(QCPGraph::lsLine);
+            row.ma_graph->setScatterStyle(QCPScatterStyle::ssNone);
+        }
+        row.ma_graph->setPen(ma_pen());
+        bool ok = on && row.y.size()>1 && row.y.size()==trend_x.size();
+        if(ok)row.ma_graph->setData(trend_x,moving_average(row.y,ma_window));
+        row.ma_graph->setVisible(ok);
+        row.plot->replot(QCustomPlot::rpQueuedReplot);
+    }
+}
+
 bool MainWindow::sync_targets()
 {
     vector<Corr_data::Target> v;
@@ -752,6 +803,7 @@ void MainWindow::plot_trend(QCustomPlot *plot)
     set_scatter_data(plot,x,y,y,shot_all);
 
     set_recent_points(plot,x,y);
+    if(plot==ui->widget)update_moving_average();
     //    DLOG<<"****  "<<corrdata->sig_name(n)<<"  2****"<<endl;
 
     if(ui->checkBox_th->checkState()==Qt::Checked){
@@ -1165,6 +1217,7 @@ void MainWindow::switch_theme(const QString &name)
         for(int i=0;i<l->count();i++)apply_item_style(l->item(i));
     style_add_badge();
     update_trend_highlight();
+    update_moving_average();
     for(auto it=trend_rows.begin();it!=trend_rows.end();++it){
         style_plot(it->plot);
         if(it->cursor)it->cursor->setPen(QPen(T.text,1.5,Qt::DashLine));
@@ -1350,6 +1403,7 @@ void MainWindow::update_trend_panel()
     }
     trend_syncing = false;
     update_trend_highlight();
+    update_moving_average();
 }
 
 // Highlight がオンのとき、メインのトレンドグラフと同じく、優秀なショット(基準信号が閾値以上)の点に
@@ -2833,6 +2887,23 @@ void MainWindow::createActions()
     trendPanelAct->setStatusTip(tr("Open a child panel with the trend graph of every signal in Plot Signal (dashed line at the mean value of the last Get)"));
     connect(trendPanelAct, &QAction::triggered, this, &MainWindow::open_trend_panel);
     fileMenu->addAction(trendPanelAct);
+
+    ma_act = new QAction(tr("Show &Moving Average"), this);
+    ma_act->setCheckable(true);
+    ma_act->setChecked(true);
+    ma_act->setStatusTip(tr("Draw a moving average line on the main trend graph and on every trend graph of the child panel"));
+    connect(ma_act, &QAction::toggled, this, [this](bool){update_moving_average();});
+    fileMenu->addAction(ma_act);
+    QAction *maWinAct = new QAction(tr("Moving Average &Window..."), this);
+    maWinAct->setStatusTip(tr("Number of shots averaged by the moving average line (default: settings.ini [MovingAverage] shots, or 10)"));
+    connect(maWinAct, &QAction::triggered, this, [this](){
+        bool ok = false;
+        int w = QInputDialog::getInt(this,"Moving Average","Number of shots in the moving average:",ma_window,1,1000,1,&ok);
+        if(!ok)return;
+        ma_window = w;
+        update_moving_average();
+    });
+    fileMenu->addAction(maWinAct);
 
     QAction *openCfgAct = new QAction(tr("Open &Config Files (pluma)"), this);
     openCfgAct->setStatusTip(tr("Open all text files in the config directory with pluma"));
