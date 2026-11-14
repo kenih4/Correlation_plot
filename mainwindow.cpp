@@ -1151,7 +1151,7 @@ void MainWindow::trendMouseMoved(QMouseEvent *event){
     tracerText->setText("("+QString::number((tracer->position->value()))+")");
     tracer->setVisible(true);
     tracerText->setVisible(true);
-    ui->widget->replot();
+    ui->widget->replot(QCustomPlot::rpQueuedReplot);     // マウスを動かすたびにすぐ全体を描くのではなく、まとめて1回にする
 
     // マウスが指しているデータ点(12ピクセル以内で最も近い点)のショットを、散布図でも囲んで示す
     int hit = -1;

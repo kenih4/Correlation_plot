@@ -147,7 +147,7 @@ public:
     bool calc_importance(bool use_th,double th,vector<Importance> &out,double &oob_r2,int &nrows,int beg=-1,int end=-1);
     // 散布図の並び順: MIC順 / 重要度順 / 閾値で分けた2群の平均の差順 / Plot Signal リストの順
     enum RankMode{RANK_MIC=0,RANK_IMPORTANCE=1,RANK_GAP=2,RANK_LIST=3};
-    void set_rank_mode(int m){rank_mode = m;imp_valid = false;gap_valid = false;};
+    void set_rank_mode(int m){rank_mode = m;imp_valid = false;gap_valid = false;imp_key_valid = false;mic_key_valid = false;};
     // MIC(と rho / p値)の計算は重いので、並び順が MIC のときだけ行う(Importance / Gap / List のときは省く)。
     // Importance ダイアログなど、MIC が必要な処理では set_mic_force(true) で一時的に計算させる
     bool mic_enabled(){return rank_mode==RANK_MIC || mic_force;}
@@ -195,6 +195,9 @@ private:
     long long eff_sacla(int n){return data[n].sacla_tag!=0 ? data[n].sacla_tag+off_sacla : 0;};   // オフセット込みで照合するタグ
     long long eff_sr(int n){return data[n].sr_tag!=0 ? data[n].sr_tag+off_sr : 0;};
     void calc_mic_rows(const vector<int> &rows);
+    size_t calc_key(const vector<int> *rows,bool use_th,double th,int beg,int end);
+    size_t mic_key = 0,imp_key = 0;         // 前回の計算条件のハッシュ(同じなら計算をやり直さない)
+    bool mic_key_valid = false,imp_key_valid = false;
     void set_self_stats();      // 基準信号自身の指標(MIC=1など)。計算せず固定値にする
     int rank_mode = RANK_MIC;   // 順位の決め方
     bool gap_valid = false;     // 平均の差が計算できているか

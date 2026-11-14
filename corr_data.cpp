@@ -398,9 +398,7 @@ double Corr_data::mic_null95(int n)
     static map<int,double> cache;
     int key = n;
     if(n>=100){
-        int unit = 1;
-        while(n/unit>=100)unit*=10;
-        key = (n/unit)*unit;    // 上位2桁に丸める
+        key = (n>=1000) ? (n/100)*100 : (n/50)*50;     // 丸めて、ショットが増えるたびに(60回のMICの)再計算をしないようにする
     }
     if(key<4)return 1.0;
     auto it = cache.find(key);
@@ -617,10 +615,44 @@ void Corr_data::update_gap(bool use_th,double th,double hl_th,int beg,int end)
     gap_valid = true;
 }
 
+// 計算結果の再利用に使う、条件とデータのハッシュ(FNV-1a)
+static size_t fnv_add(size_t h,const void *p,size_t n)
+{
+    const unsigned char *c = (const unsigned char*)p;
+    for(size_t i=0;i<n;i++){h ^= c[i];h *= 1099511628211ULL;}
+    return h;
+}
+
+// MIC / 重要度の計算条件のハッシュ: データの版(ver)、ショット数、信号の並び、Detrend、使うショット(rows)など
+size_t Corr_data::calc_key(const vector<int> *rows,bool use_th,double th,int beg,int end)
+{
+    size_t h = 1469598103934665603ULL;
+    h = fnv_add(h,&ver,sizeof(ver));
+    int n = (int)data.size();
+    h = fnv_add(h,&n,sizeof(n));
+    for(const Signal_param &s : sig)h = fnv_add(h,s.name.data(),s.name.size()+1);
+    h = fnv_add(h,&detrend_flg,sizeof(detrend_flg));
+    h = fnv_add(h,&stats_flg,sizeof(stats_flg));
+    h = fnv_add(h,&use_th,sizeof(use_th));
+    h = fnv_add(h,&th,sizeof(th));
+    h = fnv_add(h,&beg,sizeof(beg));
+    h = fnv_add(h,&end,sizeof(end));
+    if(rows){
+        size_t rn = rows->size();
+        h = fnv_add(h,&rn,sizeof(rn));
+        if(rn>0)h = fnv_add(h,rows->data(),rn*sizeof(int));
+    }
+    return h;
+}
+
 void Corr_data::update_importance(bool use_th,double th,int beg,int end)
 {
+    if(rank_mode!=RANK_IMPORTANCE){imp_valid = false;return;}
+    // 条件もデータも前回と同じなら、重い計算(ランダムフォレスト)をやり直さず、前の結果を使う
+    const size_t key = calc_key(nullptr,use_th,th,beg,end);
+    if(imp_key_valid && key==imp_key)return;
     imp_valid = false;
-    if(rank_mode!=RANK_IMPORTANCE)return;
+    imp_key_valid = false;
     vector<Importance> imp;
     double r2 = 0;
     int nrows = 0;
@@ -633,6 +665,8 @@ void Corr_data::update_importance(bool use_th,double th,int beg,int end)
     }
     sig[0].importance = 1e30;   // 基準信号が常に先頭(0位)になるようにする
     imp_valid = true;
+    imp_key = key;
+    imp_key_valid = true;
 }
 
 void Corr_data::set_self_stats()
@@ -703,6 +737,7 @@ void Corr_data::calc_mic_rows(const vector<int> &rows)
     set_self_stats();
     int n = (int)rows.size();
     if(!mic_enabled()){         // 並び順が MIC 以外のときは、重い MIC の計算をしない
+        mic_key_valid = false;
         for(int i=1;i<(int)sig.size();i++){
             sig[i].coefficient = 0;
             sig[i].rho = 0;
@@ -712,6 +747,7 @@ void Corr_data::calc_mic_rows(const vector<int> &rows)
         return;
     }
     if(n<2){
+        mic_key_valid = false;
         for(int i=1;i<(int)sig.size();i++){
             sig[i].coefficient = 0;
             sig[i].rho = 0;
@@ -720,6 +756,9 @@ void Corr_data::calc_mic_rows(const vector<int> &rows)
         }
         return;
     }
+    // 条件もデータも前回と同じなら、MIC の計算をやり直さず、前の結果を使う
+    const size_t key = calc_key(&rows,false,0,0,0);
+    if(mic_key_valid && key==mic_key)return;
     vector<double> x(n),y(n);
     const string &name0 = sig[0].name;
     for(int k=0;k<n;k++)x[k] = value(name0,rows[k]);
@@ -734,6 +773,8 @@ void Corr_data::calc_mic_rows(const vector<int> &rows)
         sig[i].coefficient = mine.mic();
         calc_stats(i,x.data(),y.data(),n);
     }
+    mic_key = key;
+    mic_key_valid = true;
 }
 
 void Corr_data::calc_mic()
