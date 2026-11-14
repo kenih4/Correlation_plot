@@ -1142,6 +1142,7 @@ MainWindow::~MainWindow()
     delete ui;
 }
 void MainWindow::trendMouseMoved(QMouseEvent *event){
+    if(ui->widget->graph(0)->data()->isEmpty())return;      // まだデータが無い(Get 前)ときは何もしない
     QPoint pos = event->pos();
     double key = floor(ui->widget->graph(0)->keyAxis()->pixelToCoord(pos.x()));
     tracer->setGraphKey(key);
@@ -1304,6 +1305,7 @@ void MainWindow::on_pushButton_clicked()
     corrdata->db_get_sync_data();
     corrdata->set_progress(nullptr);               // prog が無くなる前に外す
     if(corrdata->data_size()<2){                    // タグが決まったショットが足りない(捨てたものを除く)ので、描画しない
+        has_calculated = false;     // 描いていないので、次の Get が成功するまで自動更新しない(空に近いデータで描くと落ちる)
         statusBar()->showMessage(QString("Get: 有効なショットが %1 件しかありません").arg(corrdata->data_size()));
         QMessageBox::warning(this,"Correlation Plot",
             QString("タグ(sacla_tag/sr_tag)が決まった有効なショットが %1 件しかなく、グラフを描けません。\n"
@@ -1374,6 +1376,7 @@ void MainWindow::plot_init(QCustomPlot *plot)
 }
 void MainWindow::plot_trend(QCustomPlot *plot)
 {
+    if(corrdata->data_size()<1)return;      // x[0] などを読むので、データが無いときは描かない
     if(plot==ui->widget)update_trend_panel();       // 子パネルの信号ごとのトレンドも更新
     QVector<double> x(corrdata->data_size()),y(corrdata->data_size());
     QFont legendFont = font();
@@ -3632,6 +3635,11 @@ void MainWindow::export_csv()
 
 void MainWindow::on_pushButton_3_clicked()
 {
+    // 範囲指定(トレンドグラフのクリック2回)が済んでいないと、graph(3)/(4) にデータが無く、先頭を読むと落ちる
+    if(corrdata->data_size()<2 || ui->widget->graph(3)->data()->isEmpty() || ui->widget->graph(4)->data()->isEmpty()){
+        statusBar()->showMessage("Plot: Get でデータを取得してから、トレンドグラフを2回クリックして範囲を指定してください",5000);
+        return;
+    }
     int beg,end;
     if(ui->widget->graph(3)->data()->begin()->key < ui->widget->graph(4)->data()->begin()->key){
         beg = ui->widget->graph(3)->data()->begin()->key;
