@@ -44,8 +44,7 @@ private slots:
     void plot_trend(QCustomPlot *plot);
     void on_listWidget_2_doubleClicked(const QModelIndex &index);
 
-    bool save();
-    bool saveAs();
+    void export_csv();      // File メニュー: CSV の書き出し
 
     void mousePress();
     void trendMouseMoved(QMouseEvent *event);
@@ -268,10 +267,8 @@ private:
     Corr_data *corrdata;
     QTimer *timer;
     void createActions();
-    bool saveFile(const QString &fileName);
-    void setCurrentFile(const QString &fileName);
+    QString csv_dir;        // CSV を最後に書き出したディレクトリ
     void createStatusBar();
-    QString curFile;
     QCPItemTracer *tracer;
     QCPItemText *tracerText;
 

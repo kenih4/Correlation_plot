@@ -164,7 +164,7 @@ public:
     // 信号どうしの相関行列(行優先 N×N)。use_mic=false: Spearman(符号付き)、true: MIC。cb が false を返したら中止(空を返す)
     vector<double> corr_matrix(const vector<string> &names,bool use_mic,std::function<bool(int,int)> cb);
     int used_shots(){int k = 0;for(const Data &d : data)if(!d.beg_time.empty())k++;return k;}
-    void outfile(string);
+    bool outfile(string);       // CSV に書き出す。書けなかったら false
 private:
     static double mic_alpha(int n);
     static double mic_null95(int n);

@@ -1168,7 +1168,7 @@ void Corr_data::add_db_get_sync_data()
 #include <QDebug>
 #include <regex>
 
-void Corr_data::outfile(string fname)
+bool Corr_data::outfile(string fname)
 {
     QDir().mkpath(QFileInfo(fname.c_str()).absolutePath());     // 保存先ディレクトリが無ければ作る
     QFile fp(fname.c_str());
@@ -1202,8 +1202,8 @@ void Corr_data::outfile(string fname)
             out << Qt::endl;
         }
         fp.close();
-    }else{
-        qWarning().noquote()<<"Cannot open file  "<<fname.c_str()<<Qt::endl;
+        return true;
     }
-
+    qWarning().noquote()<<"Cannot open file  "<<fname.c_str()<<Qt::endl;
+    return false;
 }

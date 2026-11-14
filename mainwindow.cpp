@@ -26,11 +26,12 @@
 #include <QLabel>
 #include <QCheckBox>
 #include <QInputDialog>
+#include <QFileDialog>
 #include <QComboBox>
 #include <QToolTip>
 #include <QMessageBox>
 
-// 自動更新ごとに書き出すCSV
+// File メニューの Export CSV... の、保存先の初期値(以前、自動更新のたびに書き出していた場所)
 static const char *CSV_FILE = "/home_2023/xfel/xfelopr/users/kenichi/dvlp/corr_data/corr.csv";
 #include <cmath>
 #include <algorithm>
@@ -1345,7 +1346,6 @@ void MainWindow::on_pushButton_clicked()
     plot_trend(ui->widget);
     mark_calculated();
     init_highlight_threshold();
-    corrdata->outfile(CSV_FILE);
     prog.setValue(100);
     statusBar()->showMessage(QString("Get 完了: %1 ショット").arg(corrdata->data_size()));
     if(found==0){
@@ -3447,8 +3447,6 @@ void MainWindow::update_data()
     plot_extra(b);
     plot_trend(ui->widget);
     mark_calculated();
-    if(cnt>0)
-        corrdata->outfile(CSV_FILE);
 
 
 }
@@ -3475,10 +3473,10 @@ void MainWindow::createActions()
     //    QToolBar *fileToolBar = addToolBar(tr("File"));
 
     const QIcon saveIcon = QIcon::fromTheme("document-save");
-    QAction *saveAct = new QAction(saveIcon, tr("&Save"), this);
+    QAction *saveAct = new QAction(saveIcon, tr("Export &CSV..."), this);
     saveAct->setShortcuts(QKeySequence::Save);
-    saveAct->setStatusTip(tr("Save the document to disk"));
-    connect(saveAct, &QAction::triggered, this, &MainWindow::save);
+    saveAct->setStatusTip(tr("Write the current data (all shots and signals) to a CSV file at a location you choose"));
+    connect(saveAct, &QAction::triggered, this, &MainWindow::export_csv);
     fileMenu->addAction(saveAct);
     //    fileToolBar->addAction(saveAct);
 
@@ -3609,40 +3607,27 @@ void MainWindow::createStatusBar()
     statusBar()->addPermanentWidget(add_badge);
     add_badge->setVisible(ui->checkBox_add->isChecked());
 }
-bool MainWindow::save()
+// File メニューの Export CSV...: 保持しているデータを、指定した場所に CSV で書き出す(自動では書き出さない)
+void MainWindow::export_csv()
 {
-    if (curFile.isEmpty()) {
-        return saveAs();
-    } else {
-        return saveFile(curFile);
+    if(!corrdata || corrdata->data_size()<1){
+        QMessageBox::information(this,"Export CSV","書き出すデータがありません。先に Get でデータを取得してください。");
+        return;
     }
-}
-
-bool MainWindow::saveAs()
-{
-    QFileDialog dialog(this);
-    dialog.setWindowModality(Qt::WindowModal);
-    dialog.setAcceptMode(QFileDialog::AcceptSave);
-    if (dialog.exec() != QDialog::Accepted)
-        return false;
-    return saveFile(dialog.selectedFiles().first());
-}
-bool MainWindow::saveFile(const QString &fileName)
-{
-
-    corrdata->outfile(fileName.toStdString());
-    statusBar()->showMessage(tr("File saved"), 2000);
-    return true;
-}
-void MainWindow::setCurrentFile(const QString &fileName)
-{
-    curFile = fileName;
-    setWindowModified(false);
-
-    QString shownName = curFile;
-    if (curFile.isEmpty())
-        shownName = "untitled.txt";
-    setWindowFilePath(shownName);
+    if(csv_dir.isEmpty()){
+        QString d = QFileInfo(CSV_FILE).absolutePath();
+        csv_dir = QDir(d).exists() ? d : QDir::homePath();
+    }
+    QString def = csv_dir + "/corr_" + QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss") + ".csv";
+    QString fname = QFileDialog::getSaveFileName(this,"Export CSV",def,"CSV files (*.csv);;All files (*)");
+    if(fname.isEmpty())return;
+    if(QFileInfo(fname).suffix().isEmpty())fname += ".csv";
+    csv_dir = QFileInfo(fname).absolutePath();
+    if(corrdata->outfile(fname.toStdString())){
+        statusBar()->showMessage(QString("CSV exported: %1  (%2 shots)").arg(fname).arg(corrdata->data_size()),5000);
+    }else{
+        QMessageBox::warning(this,"Export CSV",QString("ファイルを書き出せませんでした:\n%1").arg(fname));
+    }
 }
 
 void MainWindow::on_pushButton_3_clicked()
