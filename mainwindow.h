@@ -166,6 +166,8 @@ private:
     void update_mean_lines(QCustomPlot *plot);
     bool mean_label_enabled(const QString &signal);
     void refresh_mean_labels();
+    void update_signal_frame(QCustomPlot *plot);   // mean_label が付いた信号の散布図の枠
+    QMap<QCustomPlot*,QCPItemRect*> signal_frame;
     int latest_mean_shots();                    // 十字印の平均に使う最新のショット数(settings.ini)
     bool settings_loaded = false;
     QDateTime settings_mtime;

@@ -1812,6 +1812,7 @@ void MainWindow::switch_theme(const QString &name)
     for(auto it=scatter_xy.begin();it!=scatter_xy.end();++it){
         apply_display(it.key());
         update_recent_mean(it.key(),it.value().x,it.value().y);
+        update_signal_frame(it.key());      // 枠の色(強調色)も切り替える
     }
     if(tracer){
         tracer->setPen(QPen(MAIN_COLOR));
@@ -2412,6 +2413,7 @@ void MainWindow::clear_plot(QCustomPlot *plot)
         if(mean_lines[plot].band)mean_lines[plot].band->setVisible(false);
     }
     scatter_xy.remove(plot);
+    update_signal_frame(plot);      // 散布図ではなくなったので、枠は消す
     plot->xAxis->setLabel(QString());
     plot->yAxis->setLabel(QString());
     plot->replot(QCustomPlot::rpQueuedReplot);
@@ -2500,8 +2502,36 @@ void MainWindow::refresh_mean_labels()
 {
     for(auto it = scatter_xy.begin(); it != scatter_xy.end(); ++it){
         update_mean_lines(it.key());
+        update_signal_frame(it.key());
         it.key()->replot();
     }
+}
+
+// signals.txt で mean_label フラグが付いている信号の散布図だけ、外周に枠(強調色)を付ける。
+// フラグが1つも付いていないときは、枠は付けない(平均値の数値は全信号に出るが、枠は目印なので)
+void MainWindow::update_signal_frame(QCustomPlot *plot)
+{
+    bool flagged = false;
+    if(plot!=ui->widget && scatter_xy.contains(plot)){
+        const QString sig = plot_signal.value(plot);
+        for(int i=0;i<ui->listWidget->count() && !flagged;i++){
+            QListWidgetItem *it = ui->listWidget->item(i);
+            flagged = item_has_flag(it,FLAG_MEAN_LABEL) && it->text()==sig;
+        }
+    }
+    QCPItemRect *&fr = signal_frame[plot];
+    if(!fr){
+        if(!flagged)return;
+        fr = new QCPItemRect(plot);
+        fr->setClipToAxisRect(false);
+        fr->setBrush(Qt::NoBrush);
+        fr->topLeft->setType(QCPItemPosition::ptViewportRatio);
+        fr->bottomRight->setType(QCPItemPosition::ptViewportRatio);
+        fr->topLeft->setCoords(0.004,0.006);
+        fr->bottomRight->setCoords(0.996,0.994);
+    }
+    fr->setPen(QPen(MAIN_COLOR,3));
+    fr->setVisible(flagged);
 }
 
 // Plot Signal リストの右クリックメニュー: その信号の平均値の数値(mean_label フラグ)の付け外し
@@ -3272,6 +3302,7 @@ void MainWindow::plot_data(QCustomPlot *plot,int n)
     plot->setInteractions(QCP::iRangeDrag|QCP::iRangeZoom);
 
     set_info_text(plot,n,best,legendFont);
+    update_signal_frame(plot);
     plot->graph(1)->setVisible(true);
     plot->graph(2)->setVisible(true);
 
