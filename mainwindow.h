@@ -146,7 +146,7 @@ private:
     QWidget *trend_win = nullptr;
     QVBoxLayout *trend_lay = nullptr;
     QScrollArea *trend_scroll = nullptr;
-    struct TrendRow{QWidget *box = nullptr;QCheckBox *cb = nullptr;QCustomPlot *plot = nullptr;QCPItemStraightLine *cursor = nullptr;QCPItemStraightLine *base_line = nullptr;QCPGraph *hi_graph = nullptr;QCPGraph *ma_graph = nullptr;QVector<double> y;};
+    struct TrendRow{QWidget *box = nullptr;QCheckBox *cb = nullptr;QCustomPlot *plot = nullptr;QCPItemStraightLine *cursor = nullptr;QCPItemStraightLine *base_line = nullptr;QCPGraph *hi_graph = nullptr;QCPGraph *ma_graph = nullptr;QCPItemRect *frame = nullptr;QVector<double> y;};
     QMap<QString,TrendRow> trend_rows;      // 信号名 → 行
     QVector<double> trend_x;                // 子パネルの横軸(各ショットの時刻)
     QStringList trend_order;                // 現在の行の信号名(順)
@@ -166,7 +166,9 @@ private:
     void update_mean_lines(QCustomPlot *plot);
     bool mean_label_enabled(const QString &signal);
     void refresh_mean_labels();
-    void update_signal_frame(QCustomPlot *plot);   // mean_label が付いた信号の散布図の枠
+    void update_signal_frame(QCustomPlot *plot);
+    void update_trend_frames();                    // 子パネルのトレンドの枠
+    bool signal_has_mean_label(const QString &signal);   // mean_label が付いた信号の散布図の枠
     QMap<QCustomPlot*,QCPItemRect*> signal_frame;
     int latest_mean_shots();                    // 十字印の平均に使う最新のショット数(settings.ini)
     bool settings_loaded = false;

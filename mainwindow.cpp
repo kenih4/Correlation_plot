@@ -1829,6 +1829,7 @@ void MainWindow::switch_theme(const QString &name)
     update_density_panel();
     update_shot_heatmap();
     update_xy_heatmap();
+    update_trend_frames();
     for(auto it=trend_rows.begin();it!=trend_rows.end();++it){
         style_plot(it->plot);
         if(it->cursor)it->cursor->setPen(QPen(T.text,1.5,Qt::DashLine));
@@ -2015,6 +2016,7 @@ void MainWindow::update_trend_panel()
     trend_syncing = false;
     update_trend_highlight();
     update_moving_average();
+    update_trend_frames();
 }
 
 // Highlight がオンのとき、メインのトレンドグラフと同じく、優秀なショット(基準信号が閾値以上)の点に
@@ -2505,21 +2507,14 @@ void MainWindow::refresh_mean_labels()
         update_signal_frame(it.key());
         it.key()->replot();
     }
+    update_trend_frames();
 }
 
 // signals.txt で mean_label フラグが付いている信号の散布図だけ、外周に枠(強調色)を付ける。
 // フラグが1つも付いていないときは、枠は付けない(平均値の数値は全信号に出るが、枠は目印なので)
-void MainWindow::update_signal_frame(QCustomPlot *plot)
+// 外周の枠(強調色)を、付ける/外す。枠は QCPItemRect(グラフの外周いっぱい)
+static void apply_frame(QCustomPlot *plot,QCPItemRect *&fr,bool flagged)
 {
-    bool flagged = false;
-    if(plot!=ui->widget && scatter_xy.contains(plot)){
-        const QString sig = plot_signal.value(plot);
-        for(int i=0;i<ui->listWidget->count() && !flagged;i++){
-            QListWidgetItem *it = ui->listWidget->item(i);
-            flagged = item_has_flag(it,FLAG_MEAN_LABEL) && it->text()==sig;
-        }
-    }
-    QCPItemRect *&fr = signal_frame[plot];
     if(!fr){
         if(!flagged)return;
         fr = new QCPItemRect(plot);
@@ -2532,6 +2527,32 @@ void MainWindow::update_signal_frame(QCustomPlot *plot)
     }
     fr->setPen(QPen(MAIN_COLOR,3));
     fr->setVisible(flagged);
+}
+
+void MainWindow::update_signal_frame(QCustomPlot *plot)
+{
+    bool flagged = false;
+    if(plot!=ui->widget && scatter_xy.contains(plot))flagged = signal_has_mean_label(plot_signal.value(plot));
+    apply_frame(plot,signal_frame[plot],flagged);
+}
+
+// 子パネルの各トレンドグラフにも、同じ信号に同じ枠を付ける
+void MainWindow::update_trend_frames()
+{
+    for(auto it=trend_rows.begin();it!=trend_rows.end();++it){
+        apply_frame(it->plot,it->frame,signal_has_mean_label(it.key()));
+        it->plot->replot(QCustomPlot::rpQueuedReplot);
+    }
+}
+
+// signals.txt で、その信号に mean_label フラグが付いているか
+bool MainWindow::signal_has_mean_label(const QString &signal)
+{
+    for(int i=0;i<ui->listWidget->count();i++){
+        QListWidgetItem *it = ui->listWidget->item(i);
+        if(item_has_flag(it,FLAG_MEAN_LABEL) && it->text()==signal)return true;
+    }
+    return false;
 }
 
 // Plot Signal リストの右クリックメニュー: その信号の平均値の数値(mean_label フラグ)の付け外し
