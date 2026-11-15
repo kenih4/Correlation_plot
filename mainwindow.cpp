@@ -1415,6 +1415,19 @@ void MainWindow::plot_trend(QCustomPlot *plot)
 
     }
     plot->xAxis->setRange(x[0]-60,x[corrdata->data_size()-1]+60);
+    if(plot==ui->widget){
+        // 初期値(Get で取れたショットの平均値)の点線。子パネルのトレンドと同じ
+        const QString nm0 = QString::fromStdString(name_y0);
+        if(trend_base.contains(nm0)){
+            if(!main_base_line){
+                main_base_line = new QCPItemStraightLine(plot);
+                main_base_line->setPen(QPen(T.muted,1.2,Qt::DashLine));
+            }
+            main_base_line->point1->setCoords(0,trend_base[nm0]);
+            main_base_line->point2->setCoords(1,trend_base[nm0]);
+            main_base_line->setVisible(true);
+        }
+    }
     //plot->graph(0)->rescaleAxes(true);
     //    DLOG<<"****  "<<corrdata->sig_name(n)<<"  3****"<<endl;
     plot->xAxis->setLabel("time");
@@ -1830,6 +1843,7 @@ void MainWindow::switch_theme(const QString &name)
     update_shot_heatmap();
     update_xy_heatmap();
     update_trend_frames();
+    if(main_base_line)main_base_line->setPen(QPen(T.muted,1.2,Qt::DashLine));
     for(auto it=trend_rows.begin();it!=trend_rows.end();++it){
         style_plot(it->plot);
         if(it->cursor)it->cursor->setPen(QPen(T.text,1.5,Qt::DashLine));

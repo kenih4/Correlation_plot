@@ -139,6 +139,7 @@ private:
     QAction *ma_act = nullptr;
     int ma_window = 10;             // 移動平均の点数(ショット数)
     QCPGraph *main_ma = nullptr;
+    QCPItemStraightLine *main_base_line = nullptr;   // メインのトレンドの初期値(Get 時の平均)の点線
     void targets_changed();
     int target_combine = Corr_data::COMBINE_SUM;
     int target_normalize = Corr_data::NORM_AUTO;
