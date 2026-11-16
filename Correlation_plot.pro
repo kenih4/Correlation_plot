@@ -46,3 +46,6 @@ include ($$(QTGUI_SETUP)/prj2010gui_libs_xfel.pri)
 
 RESOURCES += \
     figures.qrc
+
+# make distclean でも、USE_DATASTAX 版のバイナリを削除する
+QMAKE_DISTCLEAN += Correlation_plot_USE_DATASTAX_true Correlation_plot_USE_DATASTAX_false
