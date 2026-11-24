@@ -488,6 +488,24 @@ void MainWindow::add_target_item(const QString &name,double w)
     ui->listWidget_2->addItem(it);
 }
 
+// 外れ値を除いた縦軸の範囲: 両端から pct% を切り捨てた範囲に、幅の margin 倍の余白を足す。有限な値が無ければ false
+static bool robust_range(const QVector<double> &y,double pct,double margin,double &lo,double &hi)
+{
+    QVector<double> v;
+    v.reserve(y.size());
+    for(double d : y)if(std::isfinite(d))v.append(d);
+    if(v.isEmpty())return false;
+    std::sort(v.begin(),v.end());
+    const int n = v.size();
+    const int k = qBound(0,int(pct/100.0*(n-1)),(n-1)/2);
+    double a = v[k],b = v[n-1-k];
+    if(!(b>a)){a = v.first();b = v.last();}     // ほぼ全部同じ値のときは、全体の範囲
+    const double w = b-a;
+    lo = a-w*margin;
+    hi = b+w*margin;
+    if(!(hi>lo)){lo -= 0.5;hi += 0.5;}
+    return true;
+}
 // settings.ini [Target]:  combine=sum|min   normalize=auto|zscore|none
 void MainWindow::load_target_settings()
 {
@@ -497,6 +515,9 @@ void MainWindow::load_target_settings()
     bool okw = false;
     int mw = ini_string(st,"MovingAverage/shots","10").toInt(&okw);
     if(okw && mw>=1)ma_window = mw;
+    bool okp = false;
+    double pc = ini_string(st,"TrendScale/percentile","1").toDouble(&okp);
+    if(okp && pc>=0 && pc<50)robust_pct = pc;
     QString cb = ini_string(st,"Target/combine","sum").toLower();
     QString nm = ini_string(st,"Target/normalize","auto").toLower();
     if(cb=="min")target_combine = Corr_data::COMBINE_MIN;
@@ -1411,6 +1432,7 @@ void MainWindow::plot_trend(QCustomPlot *plot)
     }else{
         double lo,hi;
         corrdata->get_range(0,0.5,lo,hi);
+        if(plot==ui->widget && robust_act && robust_act->isChecked())robust_range(y,robust_pct,0.5,lo,hi);   // 外れ値を除く
         plot->yAxis->setRange(lo,hi);
 
     }
@@ -2012,6 +2034,10 @@ void MainWindow::update_trend_panel()
         row.plot->graph(0)->setData(x,y);
         row.y = y;
         row.plot->graph(0)->rescaleValueAxis();
+        if(robust_act && robust_act->isChecked()){      // 異常値に引っ張られないよう、外れ値を除いた範囲にする
+            double rlo,rhi;
+            if(robust_range(y,robust_pct,0.1,rlo,rhi))row.plot->yAxis->setRange(rlo,rhi);
+        }
         // 初期値(Get で取れたショットの平均値)の点線。縦軸の範囲に必ず入れる
         if(!row.base_line){
             row.base_line = new QCPItemStraightLine(row.plot);
@@ -3582,6 +3608,13 @@ void MainWindow::createActions()
     trendPanelAct->setStatusTip(tr("Open a child panel with the trend graph of every signal in Plot Signal (dashed line at the mean value of the last Get)"));
     connect(trendPanelAct, &QAction::triggered, this, &MainWindow::open_trend_panel);
     fileMenu->addAction(trendPanelAct);
+
+    robust_act = new QAction(tr("&Robust Y Scale (ignore outliers)"), this);
+    robust_act->setCheckable(true);
+    robust_act->setChecked(true);
+    robust_act->setStatusTip(tr("Trend graphs (main and child panel): autoscale the vertical axis without the extreme values (settings.ini [TrendScale] percentile = % cut at each end, default 1)"));
+    connect(robust_act, &QAction::toggled, this, [this](bool){ if(corrdata && corrdata->data_size()>0)plot_trend(ui->widget); });
+    fileMenu->addAction(robust_act);
 
     ma_act = new QAction(tr("Show &Moving Average"), this);
     ma_act->setCheckable(true);

@@ -137,6 +137,8 @@ private:
     bool sync_targets();
     void update_moving_average();   // メインと子パネルのトレンドの移動平均線
     QAction *ma_act = nullptr;
+    QAction *robust_act = nullptr;  // トレンドの縦軸を、外れ値を除いた範囲にする
+    double robust_pct = 1.0;        // 外れ値として切り捨てる割合(片側 %)。settings.ini [TrendScale] percentile
     int ma_window = 10;             // 移動平均の点数(ショット数)
     QCPGraph *main_ma = nullptr;
     QCPItemStraightLine *main_base_line = nullptr;   // メインのトレンドの初期値(Get 時の平均)の点線
