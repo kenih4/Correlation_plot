@@ -196,6 +196,13 @@ private:
     void set_extra_plots(bool show);
     void clear_plot(QCustomPlot *plot);
     void plot_extra(bool b);
+    bool use_threshold() const;
+    double threshold_value() const;
+    void recalc_mic();
+    void plot_ranked(bool b);
+    void plot_ranked_range(int beg,int end);
+    double shot_time(int i) const;
+    void set_range_from_data(QCustomPlot *plot,int n);
     void plot_extra_range(int beg,int end);
     // File メニューのチェック式の項目(初期値: Detrend=オフ、Stats=オフ、Gradient=オフ)
     long long tag_off_sacla = 0;        // sacla_tag のオフセット(既定0)

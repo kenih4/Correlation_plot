@@ -24,24 +24,6 @@ class MINE {
 
     /* See mine.h */
     double mic();
-
-    /* See mine.h */
-    double mas();
-
-    /* See mine.h */
-    double mev();
-
-    /* See mine.h */
-    double mcn(double eps);
-
-    /* See mine.h */
-    double mcn_general();
-
-    /* See mine.h */
-    double gmic(double p);
-
-    /* See mine.h */
-    double tic(int norm);
 };
 
 #endif /* _CPPMINE_H */

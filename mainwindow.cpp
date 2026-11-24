@@ -1346,11 +1346,7 @@ void MainWindow::on_pushButton_clicked()
         }
 
     }
-    if(ui->checkBox_th->checkState()==Qt::Checked){
-        corrdata->calc_mic(ui->V_threshold->text().toDouble());
-    }else{
-        corrdata->calc_mic();
-    }
+    recalc_mic();
     update_rank_scores();
     for(int j=0;corr_debug() && j<corrdata->sig_size();j++){
         DLOG<<" "<<j<<"  "<<
@@ -1359,12 +1355,7 @@ void MainWindow::on_pushButton_clicked()
     }
 
     step("グラフを描画中",95);
-    plot_data(ui->widget_1,corrdata->get_ranking(1));
-    plot_data(ui->widget_2,corrdata->get_ranking(2));
-    plot_data(ui->widget_3,corrdata->get_ranking(3));
-    plot_data(ui->widget_7,corrdata->get_ranking(4));
-    plot_data(ui->widget_8,corrdata->get_ranking(5));
-    plot_data(ui->widget_9,corrdata->get_ranking(6));
+    plot_ranked(true);
     plot_extra(true);
     plot_trend(ui->widget);
     mark_calculated();
@@ -1408,7 +1399,7 @@ void MainWindow::plot_trend(QCustomPlot *plot)
     //    DLOG<<"****  "<<corrdata->sig_name(n)<<"  1****"<<endl;
     const string &name_y0 = corrdata->sig_name(0);
     for(int i=0;i<corrdata->data_size();i++){
-        x[i] = QDateTime::fromString(QString::fromStdString(corrdata->endtime(i)),"yyyy/MM/dd HH:mm:ss.z").toSecsSinceEpoch();
+        x[i] = shot_time(i);
         y[i] = corrdata->value(name_y0,i);
     }
     //    DLOG<<"****  "<<corrdata->sig_name(n)<<"  2****"<<endl;
@@ -1425,9 +1416,9 @@ void MainWindow::plot_trend(QCustomPlot *plot)
     }
     //    DLOG<<"****  "<<corrdata->sig_name(n)<<"  2****"<<endl;
 
-    if(ui->checkBox_th->checkState()==Qt::Checked){
+    if(use_threshold()){
         double lo,hi;
-        corrdata->get_range(0,0.5,0,ui->V_threshold->text().toDouble(),lo,hi);
+        corrdata->get_range(0,0.5,0,threshold_value(),lo,hi);
         plot->yAxis->setRange(lo,hi);
     }else{
         double lo,hi;
@@ -1489,9 +1480,9 @@ QString MainWindow::update_binned_curve(QCustomPlot *plot,const QVector<double> 
     }
 
     // MIC の計算と同じ条件(Threshold オンなら基準信号が閾値を超えたショットだけ)
-    bool useTh = ui->checkBox_th->checkState()==Qt::Checked;
+    bool useTh = use_threshold();
     bool detrended = detrend_act->isChecked();   // 表示データは閾値で絞り込み済み
-    double th = ui->V_threshold->text().toDouble();
+    double th = threshold_value();
     QVector<QPair<double,double>> pts;
     for(int i=0;i<x.size() && i<y.size();i++){
         if(!std::isfinite(x[i]) || !std::isfinite(y[i]))continue;
@@ -2021,7 +2012,7 @@ void MainWindow::update_trend_panel()
     }
     QVector<double> x(n);
     for(int i=0;i<n;i++)
-        x[i] = QDateTime::fromString(QString::fromStdString(corrdata->endtime(i)),"yyyy/MM/dd HH:mm:ss.z").toSecsSinceEpoch();
+        x[i] = shot_time(i);
     trend_x = x;
     trend_syncing = true;       // 横軸は、メインのトレンドグラフと同じ範囲にする(連動のループを防ぐ)
     for(int k=0;k<names.size();k++){
@@ -2838,23 +2829,63 @@ void MainWindow::mark_calculated()
     last_signature = calc_signature();
 }
 
+// Threshold の設定(チェックボックスと値)
+bool MainWindow::use_threshold() const{return ui->checkBox_th->checkState()==Qt::Checked;}
+double MainWindow::threshold_value() const{return ui->V_threshold->text().toDouble();}
+
+// Threshold がオンなら、基準信号が閾値を超えたショットだけで MIC などを計算する
+void MainWindow::recalc_mic()
+{
+    if(use_threshold()){
+        corrdata->calc_mic(threshold_value());
+    }else{
+        corrdata->calc_mic();
+    }
+}
+
+// 順位 1〜6 の信号を、6枚の散布図に描く(b: 順位に従って信号を入れ替える。false なら Fix 中で、並びを変えない)
+void MainWindow::plot_ranked(bool b)
+{
+    QCustomPlot *const w[6] = {ui->widget_1,ui->widget_2,ui->widget_3,ui->widget_7,ui->widget_8,ui->widget_9};
+    for(int k=0;k<6;k++)plot_data(w[k],corrdata->get_ranking(k+1,b));
+}
+void MainWindow::plot_ranked_range(int beg,int end)
+{
+    QCustomPlot *const w[6] = {ui->widget_1,ui->widget_2,ui->widget_3,ui->widget_7,ui->widget_8,ui->widget_9};
+    for(int k=0;k<6;k++)plot_data(w[k],corrdata->get_ranking(k+1),beg,end);
+}
+
+// ショット i の時刻(秒)。トレンドグラフの横軸
+double MainWindow::shot_time(int i) const
+{
+    return QDateTime::fromString(QString::fromStdString(corrdata->endtime(i)),"yyyy/MM/dd HH:mm:ss.z").toSecsSinceEpoch();
+}
+
+// 散布図の軸範囲を、信号 n(横)と基準信号(縦)の最小/最大から決める。Threshold がオンなら、閾値を超えたショットだけで決める
+void MainWindow::set_range_from_data(QCustomPlot *plot,int n)
+{
+    double lo,hi;
+    if(use_threshold()){
+        const double th = threshold_value();
+        corrdata->get_range(n,0.5,0,th,lo,hi);
+        plot->xAxis->setRange(lo,hi);
+        corrdata->get_range(0,0.5,0,th,lo,hi);
+    }else{
+        corrdata->get_range(n,0.5,lo,hi);
+        plot->xAxis->setRange(lo,hi);
+        corrdata->get_range(0,0.5,lo,hi);
+    }
+    plot->yAxis->setRange(lo,hi);
+}
+
 // 保持しているデータからMIC等を計算し直して6枚の散布図を描き直す(DBは読まない)
 void MainWindow::refresh_plots()
 {
     if(corrdata->sig_size()<2 || corrdata->data_size()<2)return;
-    if(ui->checkBox_th->checkState()==Qt::Checked){
-        corrdata->calc_mic(ui->V_threshold->text().toDouble());
-    }else{
-        corrdata->calc_mic();
-    }
+    recalc_mic();
     update_rank_scores();
     bool b = ui->checkBox_fix->checkState()!=Qt::Checked;
-    plot_data(ui->widget_1,corrdata->get_ranking(1,b));
-    plot_data(ui->widget_2,corrdata->get_ranking(2,b));
-    plot_data(ui->widget_3,corrdata->get_ranking(3,b));
-    plot_data(ui->widget_7,corrdata->get_ranking(4,b));
-    plot_data(ui->widget_8,corrdata->get_ranking(5,b));
-    plot_data(ui->widget_9,corrdata->get_ranking(6,b));
+    plot_ranked(b);
     plot_extra(b);
     mark_calculated();
 }
@@ -2888,8 +2919,8 @@ void MainWindow::update_rank_scores(int beg,int end)
         corrdata->update_importance(false,0,beg,end);
         corrdata->update_gap(false,0,hl,beg,end);
     }else{
-        bool useTh = ui->checkBox_th->checkState()==Qt::Checked;
-        double th = ui->V_threshold->text().toDouble();
+        bool useTh = use_threshold();
+        double th = threshold_value();
         corrdata->update_importance(useTh,th);
         corrdata->update_gap(useTh,th,hl);
     }
@@ -3076,22 +3107,18 @@ void MainWindow::show_importance()
         QMessageBox::information(this,"Importance","Get/Plot でデータを取得し、信号を3つ以上(基準信号+2つ以上)にしてください。");
         return;
     }
-    bool useTh = ui->checkBox_th->checkState()==Qt::Checked;
+    bool useTh = use_threshold();
     corrdata->set_detrend(detrend_act->isChecked());
     // 表のMICは現在の条件で計算し直したものにする(並び順が MIC / Importance 以外でも、ここでは計算する)
     corrdata->set_mic_force(true);
-    if(useTh){
-        corrdata->calc_mic(ui->V_threshold->text().toDouble());
-    }else{
-        corrdata->calc_mic();
-    }
+    recalc_mic();
     corrdata->set_mic_force(false);
 
     vector<Importance> imp;
     double r2 = 0;
     int nrows = 0;
     QApplication::setOverrideCursor(Qt::WaitCursor);
-    bool ok = corrdata->calc_importance(useTh,ui->V_threshold->text().toDouble(),imp,r2,nrows);
+    bool ok = corrdata->calc_importance(useTh,threshold_value(),imp,r2,nrows);
     QApplication::restoreOverrideCursor();
     if(!ok){
         QMessageBox::information(this,"Importance",
@@ -3157,8 +3184,8 @@ void MainWindow::show_importance()
 // Detrend オンのときの表示用データ。MICの計算と同じ手順(閾値を超えたショットだけを残し、移動平均を引く)にする
 void MainWindow::detrend_xy(QVector<double> &x,QVector<double> &y,QVector<double> &yraw,QVector<int> &shot)
 {
-    bool useTh = ui->checkBox_th->checkState()==Qt::Checked;
-    double th = ui->V_threshold->text().toDouble();
+    bool useTh = use_threshold();
+    double th = threshold_value();
     QVector<double> xs,ys,rs;
     QVector<int> ss;
     for(int i=0;i<x.size() && i<y.size();i++){
@@ -3339,18 +3366,8 @@ void MainWindow::plot_data(QCustomPlot *plot,int n)
 
     if(dt){
         set_range_from(plot,x,y);
-    }else if(ui->checkBox_th->checkState()==Qt::Checked){
-        double th = ui->V_threshold->text().toDouble(),lo,hi;
-        corrdata->get_range(n,0.5,0,th,lo,hi);
-        plot->xAxis->setRange(lo,hi);
-        corrdata->get_range(0,0.5,0,th,lo,hi);
-        plot->yAxis->setRange(lo,hi);
     }else{
-        double lo,hi;
-        corrdata->get_range(n,0.5,lo,hi);
-        plot->xAxis->setRange(lo,hi);
-        corrdata->get_range(0,0.5,lo,hi);
-        plot->yAxis->setRange(lo,hi);
+        set_range_from_data(plot,n);
     }
 
     plot->xAxis->setLabel(tr(corrdata->sig_name(n).c_str()));
@@ -3516,11 +3533,7 @@ void MainWindow::update_data()
         return;
     }
 
-    if(ui->checkBox_th->checkState()==Qt::Checked){
-        corrdata->calc_mic(ui->V_threshold->text().toDouble());
-    }else{
-        corrdata->calc_mic();
-    }
+    recalc_mic();
     update_rank_scores();
     if(cnt>0 && corr_debug())
         for(int j=0;j<corrdata->sig_size();j++){
@@ -3533,12 +3546,7 @@ void MainWindow::update_data()
     if(ui->checkBox_fix->checkState()==Qt::Checked){
         b = false;
     }
-    plot_data(ui->widget_1,corrdata->get_ranking(1,b));
-    plot_data(ui->widget_2,corrdata->get_ranking(2,b));
-    plot_data(ui->widget_3,corrdata->get_ranking(3,b));
-    plot_data(ui->widget_7,corrdata->get_ranking(4,b));
-    plot_data(ui->widget_8,corrdata->get_ranking(5,b));
-    plot_data(ui->widget_9,corrdata->get_ranking(6,b));
+    plot_ranked(b);
     plot_extra(b);
     plot_trend(ui->widget);
     mark_calculated();
@@ -3739,25 +3747,14 @@ void MainWindow::on_pushButton_3_clicked()
         statusBar()->showMessage("Plot: Get でデータを取得してから、トレンドグラフを2回クリックして範囲を指定してください",5000);
         return;
     }
-    int beg,end;
-    if(ui->widget->graph(3)->data()->begin()->key < ui->widget->graph(4)->data()->begin()->key){
-        beg = ui->widget->graph(3)->data()->begin()->key;
-        end = ui->widget->graph(4)->data()->begin()->key;
-    }else{
-        beg = ui->widget->graph(3)->data()->begin()->key;
-        end = ui->widget->graph(4)->data()->begin()->key;
-    }
+    const int beg = ui->widget->graph(3)->data()->begin()->key;      // (どちらを先にクリックしても、この順で使う)
+    const int end = ui->widget->graph(4)->data()->begin()->key;
     DLOG<<beg<<"   "<<end<<endl;
     corrdata->calc_mic(beg,end);
     update_rank_scores(beg,end);
     DLOG<<beg<<"   "<<end<<endl;
 
-    plot_data(ui->widget_1,corrdata->get_ranking(1),beg,end);
-    plot_data(ui->widget_2,corrdata->get_ranking(2),beg,end);
-    plot_data(ui->widget_3,corrdata->get_ranking(3),beg,end);
-    plot_data(ui->widget_7,corrdata->get_ranking(4),beg,end);
-    plot_data(ui->widget_8,corrdata->get_ranking(5),beg,end);
-    plot_data(ui->widget_9,corrdata->get_ranking(6),beg,end);
+    plot_ranked_range(beg,end);
     plot_extra_range(beg,end);
     DLOG<<beg<<"   "<<end<<endl;
 
@@ -3807,18 +3804,8 @@ void MainWindow::plot_data(QCustomPlot *plot,int n,int beg,int end)
 
     if(dt){
         set_range_from(plot,x,y);
-    }else if(ui->checkBox_th->checkState()==Qt::Checked){
-        double th = ui->V_threshold->text().toDouble(),lo,hi;
-        corrdata->get_range(n,0.5,0,th,lo,hi);
-        plot->xAxis->setRange(lo,hi);
-        corrdata->get_range(0,0.5,0,th,lo,hi);
-        plot->yAxis->setRange(lo,hi);
     }else{
-        double lo,hi;
-        corrdata->get_range(n,0.5,lo,hi);
-        plot->xAxis->setRange(lo,hi);
-        corrdata->get_range(0,0.5,lo,hi);
-        plot->yAxis->setRange(lo,hi);
+        set_range_from_data(plot,n);
     }
 
     plot->xAxis->setLabel(tr(corrdata->sig_name(n).c_str()));

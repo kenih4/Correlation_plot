@@ -61,7 +61,6 @@ public:
     ~Corr_data();
     void get_tag(string endtime);
     void drop_untagged();       // タグが決まらなかったショットを捨てる
-    void get_tag(string begtime,string endtime);
     struct TSig{string name;double weight;};   // 基準信号そのもの(DB から取る)
     // 説明変数を追加する(基準信号と同じ名前のものは、相関を見る意味がないので追加しない)
     void add_signal(string signal){
@@ -86,7 +85,6 @@ public:
     bool set_targets(const vector<Target> &t,int combine,int normalize);
     int target_count(){return (int)tsig.size();}
     const string &target_name(int k){return (k>=0 && k<(int)tsig.size()) ? tsig[k].name : empty_name;}
-    double target_weight(int k){return (k>=0 && k<(int)tsig.size()) ? tsig[k].weight : 0.0;}
     string target_label();      // 合成値の表示名(基準信号が1つで重み1、正規化なしなら、その信号名そのもの)
     void db_get_sync_data();
     int data_size(){return size;};
@@ -112,19 +110,12 @@ public:
     double rho(int n){return sig[n].rho;};
     double pval(int n){return sig[n].pval;};
     double mic_null(int n){return sig[n].mic_null;};
-    double get_max(int n);
-    double get_min(int n);
-    double get_max(int n,double ratio);
-    double get_min(int n,double ratio);
-    double get_max(int n,double ratio,int a,double th);
-    // get_min/get_max と同じ値を、1回の走査でまとめて返す
+    // 信号 n の表示範囲(最小/最大から比率 ratio だけ広げる)。a,th を付けると、信号 a が th を超えたショットだけで求める
     void get_range(int n,double ratio,double &lo,double &hi);
     void get_range(int n,double ratio,int a,double th,double &lo,double &hi);
-    double get_min(int n,double ratio,int a,double th);
     int get_ranking(int ranking);
     int get_ranking(int ranking,bool flg);
     void append();
-    void erase();
     void erase(int n);
     int add_tag(string strtime);
     void add_db_get_sync_data();
@@ -132,8 +123,6 @@ public:
     // タグのオフセット: 各信号のデータ点を選ぶとき、タグ(sacla_tag, sr_tag)にこの値を足したイベント番号と照合する。
     // タグが見つかっていない(0)ショットには足さない。タグ自体の決定(get_tag, add_tag)は変えない
     void set_tag_offset(long long sacla,long long sr){off_sacla = sacla;off_sr = sr;};
-    long long tag_offset_sacla(){return off_sacla;};
-    long long tag_offset_sr(){return off_sr;};
     // 取得の進み具合を知らせるコールバック(Get の進捗表示用)。progress(段階, 済んだ数, 全体の数)
     //   段階 0: タグの決定(ショットごと)、1: 信号の値の取得(ショットごと)
     void set_progress(std::function<void(int,int,int)> f){progress_cb = f;};

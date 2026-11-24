@@ -145,62 +145,6 @@ void Corr_data::get_tag(string endtime)
     }
     drop_untagged();
 }
-void Corr_data::get_tag(string begtime,string endtime)
-{
-    string sep5u = "sr_mon_screen_sep5u_otr/intensity";
-    string route = "xfel_tmg_sw_master_ema_route_inf_shm/current";
-    string ssbt = "sr_safety_topup_intlk_beam_ssbt1/charge";
-    Db_f_data *get_inf_sep5u;
-    Db_i_data *get_inf_route;
-    Db_f_data *get_inf_ssbt;
-    int get_inf_cnt_sep5u = 0,get_inf_cnt_route = 0,get_inf_cnt_ssbt = 0;
-    int status;
-    char out[256];
-    uint64_t btime;
-
-    status = db_get_data_f(sep5u.c_str(),begtime.c_str(),endtime.c_str(),&get_inf_sep5u,&get_inf_cnt_sep5u);
-    if(status==0 && get_inf_cnt_sep5u>0){
-        size = get_inf_cnt_sep5u;
-        data.resize(size);
-        for(int i=0;i<get_inf_cnt_sep5u;i++){
-            DLOG<<(get_inf_sep5u+i)->evno << "  " << (get_inf_sep5u+i)->tdata<<endl;
-            db_unixtime_us_to_date((get_inf_sep5u+i)->unixtime_us,out);
-            status = db_get_data_num_i(route.c_str(),out,60,&get_inf_route,&get_inf_cnt_route);
-            if(status==0 && get_inf_cnt_route>0){
-                for(int j=0;j<get_inf_cnt_route;j++){
-                    if((get_inf_route+j)->idata==769){
-                        data[i].sacla_tag=(get_inf_route+j)->evno;
-                        db_unixtime_us_to_date((get_inf_route+get_inf_cnt_route-1)->unixtime_us,out);
-                        data[i].beg_time = out;
-                        db_unixtime_us_add_sec(get_inf_route->unixtime_us,2.0,&btime);
-                        db_unixtime_us_to_date(btime,out);
-                        data[i].end_time = out;
-                        status = db_get_data_f(ssbt.c_str(),data[i].beg_time.c_str(),data[i].end_time.c_str(),&get_inf_ssbt,&get_inf_cnt_ssbt);
-                        if(status == 0 && get_inf_cnt_ssbt>0){
-                            for(int n=0;n<get_inf_cnt_ssbt;n++){
-                                if((get_inf_ssbt+n)->fdata > 0.0){
-                                    data[i].sr_tag = (get_inf_ssbt+n)->evno;
-                                    break;
-                                }
-                            }
-                            free(get_inf_ssbt);
-                        }
-                        break;
-                    }
-                }
-                free(get_inf_route);
-            }
-            log_tag((get_inf_sep5u+i)->evno,data[i],
-                    data[i].sacla_tag==0 ? "(route 769 not found)" : (data[i].sr_tag==0 ? "(sr_tag not found)" : ""),
-                    off_sacla,off_sr);
-            report(0,i+1,get_inf_cnt_sep5u);
-        }
-        free(get_inf_sep5u);
-    }
-    drop_untagged();
-    sort(data.begin(),data.end());
-}
-
 // ===== 基準信号(Target) =====
 vector<string> Corr_data::fetch_names()
 {
@@ -843,81 +787,6 @@ void Corr_data::get_range(int n,double ratio,int a,double th,double &lo,double &
     hi = mx + (mx - mn) * ratio;
 }
 
-double Corr_data::get_max(int n)
-{
-
-    double ret = value(sig[n].name,0);
-    for(int i=1;i<size;i++){
-        if(ret<value(sig[n].name,i))ret = value(sig[n].name,i);
-    }
-    return ret;
-}
-
-double Corr_data::get_min(int n)
-{
-    double ret = value(sig[n].name,0);
-    for(int i=1;i<size;i++){
-        if(ret>value(sig[n].name,i))ret = value(sig[n].name,i);
-    }
-    return ret;
-}
-
-double Corr_data::get_max(int n,double ratio)
-{
-    double max = value(sig[n].name,0);
-    double min = value(sig[n].name,0);
-    double ret;
-    for(int i=1;i<size;i++){
-        if(max<value(sig[n].name,i))max = value(sig[n].name,i);
-        if(min>value(sig[n].name,i))min = value(sig[n].name,i);
-    }
-    ret = max + (max - min) * ratio;
-    return ret;
-}
-
-double Corr_data::get_min(int n,double ratio)
-{
-    double max = value(sig[n].name,0);
-    double min = value(sig[n].name,0);
-    double ret;
-    for(int i=1;i<size;i++){
-        if(max<value(sig[n].name,i))max = value(sig[n].name,i);
-        if(min>value(sig[n].name,i))min = value(sig[n].name,i);
-    }
-    ret = min - (max - min) * ratio;
-    return ret;
-}
-
-double Corr_data::get_max(int n,double ratio,int a,double th)
-{
-    double max = value(sig[n].name,0);
-    double min = value(sig[n].name,0);
-    double ret;
-    for(int i=1;i<size;i++){
-        if(value(sig[a].name,i)>th){
-            if(max<value(sig[n].name,i))max = value(sig[n].name,i);
-            if(min>value(sig[n].name,i))min = value(sig[n].name,i);
-        }
-    }
-    ret = max + (max - min) * ratio;
-    return ret;
-}
-
-double Corr_data::get_min(int n,double ratio,int a,double th)
-{
-    double max = value(sig[n].name,0);
-    double min = value(sig[n].name,0);
-    double ret;
-    for(int i=1;i<size;i++){
-        if(value(sig[a].name,i)>th){
-            if(max<value(sig[n].name,i))max = value(sig[n].name,i);
-            if(min>value(sig[n].name,i))min = value(sig[n].name,i);
-        }
-    }
-    ret = min - (max - min) * ratio;
-    return ret;
-}
-
 int Corr_data::get_ranking(int ranking,bool flg){
     int ret = 0;        // 該当する順位が無いとき(信号の数より大きい順位など)は 0(基準信号)を返す
     if(flg == false && rank.size() == sig.size()){
@@ -958,13 +827,6 @@ void Corr_data::append()
 {
     size+=1;
     data.resize(size);
-}
-
-void Corr_data::erase()
-{
-    data.erase(data.begin());
-    size-=1;
-    ver++;
 }
 
 void Corr_data::erase(int n)
